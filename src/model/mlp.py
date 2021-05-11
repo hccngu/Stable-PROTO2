@@ -12,13 +12,13 @@ class MLP(nn.Module):
 
         self.d = nn.Sequential(
                 nn.Dropout(0.2),
-                nn.Linear(ebd, 128),
+                nn.Linear(ebd, 256),
                 )
         self.cost = nn.CrossEntropyLoss()
 
     def forward(self, inputs):
 
-        logits = self.d(inputs)  # [b, 256] -> [b, 128]
+        logits = self.d(inputs)  # [b, 256] -> [b, 256]
 
         return logits
 
