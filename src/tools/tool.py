@@ -1,25 +1,26 @@
 import argparse
 
 import torch
+import random
 import numpy as np
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-            description="Few Shot Text Classification with Distributional Signatures")
+            description="Few Shot Text Classification with Stable-PROTO.")
 
     parser.add_argument("--data_path", type=str,
-                        default="data/reuters.json",
+                        default="../data/amazon.json",
                         help="path to dataset")
-    parser.add_argument("--dataset", type=str, default="reuters",
+    parser.add_argument("--dataset", type=str, default="amazon",
                         help="name of the dataset. "
                         "Options: [20newsgroup, amazon, huffpost, "
                         "reuters, rcv1, fewrel]")
-    parser.add_argument("--n_train_class", type=int, default=15,
+    parser.add_argument("--n_train_class", type=int, default=10,
                         help="number of meta-train classes")
     parser.add_argument("--n_val_class", type=int, default=5,
                         help="number of meta-val classes")
-    parser.add_argument("--n_test_class", type=int, default=11,
+    parser.add_argument("--n_test_class", type=int, default=9,
                         help="number of meta-test classes")
 
     parser.add_argument("--n_workers", type=int, default=10,
@@ -33,13 +34,13 @@ def parse_args():
     parser.add_argument("--query", type=int, default=25,
                         help="#query examples for each class for each task")
 
-    parser.add_argument("--train_epochs", type=int, default=1000,
+    parser.add_argument("--train_epochs", type=int, default=10000,
                         help="max num of training epochs")
-    parser.add_argument("--train_episodes", type=int, default=100,
+    parser.add_argument("--train_episodes", type=int, default=2,
                         help="#tasks sampled during each training epoch")
-    parser.add_argument("--val_episodes", type=int, default=100,
+    parser.add_argument("--val_epochs", type=int, default=100,
                         help="#asks sampled during each validation epoch")
-    parser.add_argument("--test_episodes", type=int, default=1000,
+    parser.add_argument("--test_epochs", type=int, default=1000,
                         help="#tasks sampled during each testing epoch")
 
     parser.add_argument("--wv_path", type=str,
@@ -76,9 +77,10 @@ def parse_args():
                         help="path to the pretraiend weights")
 
     parser.add_argument("--pretrain", type=str, default=None, help="path to the pretraiend weights for MLADA")
-    parser.add_argument("--k", type=int, default=None, help="Number of iterations of the adversarial network")
-    parser.add_argument("--lr_g", type=float, default=1e-3, help="learning rate of G")
-    parser.add_argument("--lr_d", type=float, default=1e-3, help="learning rate of D")
+    parser.add_argument("--train_iter", type=int, default=5, help="Number of iterations of training(in)")
+    parser.add_argument("--test_iter", type=int, default=10, help="Number of iterations of testing(in)")
+    parser.add_argument("--meta_lr", type=float, default=1e-3, help="learning rate of meta(out)")
+    parser.add_argument("--task_lr", type=float, default=1, help="learning rate of task(in)")
     parser.add_argument("--lr_scheduler", type=str, default=None, help="lr_scheduler")
     parser.add_argument("--ExponentialLR_gamma", type=float, default=0.98, help="ExponentialLR_gamma")
     parser.add_argument("--train_mode", type=str, default=None, help="you can choose t_add_v or None")
@@ -98,18 +100,13 @@ def print_args(args):
     for attr, value in sorted(args.__dict__.items()):
         print("\t{}={}".format(attr.upper(), value))
     print("""                          
-                        .---.          _______                 
-         __  __   ___   |   |          \  ___ `'.              
-        |  |/  `.'   `. |   |           ' |--.\  \             
-        |   .-.  .-.   '|   |           | |    \  '            
-        |  |  |  |  |  ||   |    __     | |     |  '    __     
-        |  |  |  |  |  ||   | .:--.'.   | |     |  | .:--.'.   
-        |  |  |  |  |  ||   |/ |   \ |  | |     ' .'/ |   \ |  
-        |  |  |  |  |  ||   |`" __ | |  | |___.' /' `" __ | |  
-        |__|  |__|  |__||   | .'.''| | /_______.'/   .'.''| |  
-                        '---'/ /   | |_\_______|/   / /   | |_ 
-                             \ \._,\ '/             \ \._,\ '/ 
-                              `--'  `"               `--'  `"  
+          _________ __        ___.   .__                  ____________________ ___________________________   
+         /   _____//  |______ \\_ |_ |  |   ____          \\______   \\______   \\_____  \\__    ___/\\_____   \\  
+         \\_____  \\   __\\__  \\ | __ \\|  | _/ __ \\   ______ |     ___/|       _/ /   |   \\|    |    /   |   \\ 
+         /        \\|  |  / __\\| \\_\\ \\  |_\\  ___/  /_____/ |    |    |    |   \\/    |    \\    |   /    |    \\
+        /_______  /|__|  (___ /___  /____/\\___  >         |____|    |____|_  /\\_______  /____|   \\_______  /
+                \\/          \\/    \\/          \\/                           \\/         \\/                 \\/                                                            
+        
     """)
 
 
@@ -118,8 +115,10 @@ def set_seed(seed):
         Setting random seeds
     """
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
 
 
 def load_model_state_dict(model, model_path):
@@ -141,3 +140,37 @@ def load_model_state_dict(model, model_path):
     print("___________________________________________________________")
     model.load_state_dict(model_dict)
     return model
+
+
+def neg_dist(instances, class_proto):  # ins:[N*K, 256], cla:[N, 256]
+    return -torch.pow(torch.pow(class_proto.unsqueeze(0) - instances.unsqueeze(1), 2).sum(-1), 0.5)
+
+
+def reidx_y(args, YS, YQ):
+    '''
+        Map the labels into 0,..., way
+        @param YS: batch_size
+        @param YQ: batch_size
+
+        @return YS_new: batch_size
+        @return YQ_new: batch_size
+    '''
+    unique1, inv_S = torch.unique(YS, sorted=True, return_inverse=True)
+    unique2, inv_Q = torch.unique(YQ, sorted=True, return_inverse=True)
+
+    if len(unique1) != len(unique2):
+        raise ValueError(
+            'Support set classes are different from the query set')
+
+    if len(unique1) != args.way:
+        raise ValueError(
+            'Support set classes are different from the number of ways')
+
+    if int(torch.sum(unique1 - unique2).item()) != 0:
+        raise ValueError(
+            'Support set classes are different from the query set classes')
+
+    Y_new = torch.arange(start=0, end=args.way, dtype=unique1.dtype,
+            device=unique1.device)
+
+    return Y_new[inv_S], Y_new[inv_Q]

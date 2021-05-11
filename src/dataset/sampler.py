@@ -41,18 +41,16 @@ class ParallelSampler():
 
         for _ in range(self.num_episodes):
             # wait until self.thread finishes
-            support, query, source = self.done_queue.get()
+            support, query = self.done_queue.get()
 
             # convert to torch.tensor
             support = utils.to_tensor(support, self.args.cuda, ['raw'])
             query = utils.to_tensor(query, self.args.cuda, ['raw'])
-            source = utils.to_tensor(source, self.args.cuda, ['raw'])
 
             support['is_support'] = True
             query['is_support'] = False
-            source['is_support'] = False
 
-            yield support, query, source
+            yield support, query
 
     def worker(self, done_queue, sampled_classes, source_classes):
         '''
@@ -65,7 +63,7 @@ class ParallelSampler():
                 continue
 
             # sample examples
-            support_idx, query_idx, source_idx = [], [], []
+            support_idx, query_idx = [], []
             for y in sampled_classes:
                 tmp = np.random.permutation(len(self.idx_list[y]))
                 support_idx.append(
@@ -74,29 +72,19 @@ class ParallelSampler():
                     self.idx_list[y][
                         tmp[self.args.shot:self.args.shot + self.args.query]])
 
-            for z in source_classes:
-                tmp = np.random.permutation(len(self.idx_list[z]))
-                source_idx.append(
-                    tmp[:self.args.query]
-                )
-
             support_idx = np.concatenate(support_idx)
             query_idx = np.concatenate(query_idx)
-            source_idx = np.concatenate(source_idx)
 
             # aggregate examples
             max_support_len = np.max(self.data['text_len'][support_idx])
             max_query_len = np.max(self.data['text_len'][query_idx])
-            max_source_len = np.max(self.data['text_len'][source_idx])
 
             support = utils.select_subset(self.data, {}, ['text', 'text_len', 'label'],
                                           support_idx, max_support_len)
             query = utils.select_subset(self.data, {}, ['text', 'text_len', 'label'],
                                         query_idx, max_query_len)
-            source = utils.select_subset(self.data, {}, ['text', 'text_len', 'label'],
-                                         source_idx, max_source_len)
 
-            done_queue.put((support, query, source))
+            done_queue.put((support, query))
 
     def __del__(self):
         '''

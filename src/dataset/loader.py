@@ -14,33 +14,33 @@ def _get_20newsgroup_classes(args):
         @return list of classes associated with each split
     '''
     label_dict = {
-            'talk.politics.mideast': 0,
-            'sci.space': 1,
-            'misc.forsale': 2,
-            'talk.politics.misc': 3,
-            'comp.graphics': 4,
-            'sci.crypt': 5,
-            'comp.windows.x': 6,
-            'comp.os.ms-windows.misc': 7,
-            'talk.politics.guns': 8,
-            'talk.religion.misc': 9,
-            'rec.autos': 10,
-            'sci.med': 11,
-            'comp.sys.mac.hardware': 12,
-            'sci.electronics': 13,
-            'rec.sport.hockey': 14,
-            'alt.atheism': 15,
-            'rec.motorcycles': 16,
-            'comp.sys.ibm.pc.hardware': 17,
-            'rec.sport.baseball': 18,
-            'soc.religion.christian': 19,
+            'talk politics mideast': 0,
+            'sci space': 1,
+            'misc forsale': 2,
+            'talk politics misc': 3,
+            'comp graphics': 4,
+            'sci crypt': 5,
+            'comp windows x': 6,
+            'comp os ms-windows misc': 7,
+            'talk politics guns': 8,
+            'talk religion misc': 9,
+            'rec autos': 10,
+            'sci med': 11,
+            'comp sys mac hardware': 12,
+            'sci electronics': 13,
+            'rec sport hockey': 14,
+            'alt atheism': 15,
+            'rec motorcycles': 16,
+            'comp sys ibm pc hardware': 17,
+            'rec sport baseball': 18,
+            'soc religion christian': 19,
         }
 
     val_classes = list(range(5))
     train_classes = list(range(5, 13))
     test_classes = list(range(13, 20))
 
-    return train_classes, val_classes, test_classes
+    return train_classes, val_classes, test_classes, label_dict
 
 
 def _get_amazon_classes(args):
@@ -48,37 +48,37 @@ def _get_amazon_classes(args):
         @return list of classes associated with each split
     '''
     label_dict = {
-        'Amazon_Instant_Video': 0,
-        'Apps_for_Android': 1,
+        'Amazon Instant Video': 0,
+        'Apps for Android': 1,
         'Automotive': 2,
         'Baby': 3,
         'Beauty': 4,
         'Books': 5,
-        'CDs_and_Vinyl': 6,
-        'Cell_Phones_and_Accessories': 7,
-        'Clothing_Shoes_and_Jewelry': 8,
-        'Digital_Music': 9,
+        'CDs and Vinyl': 6,
+        'Cell Phones and Accessories': 7,
+        'Clothing Shoes and Jewelry': 8,
+        'Digital Music': 9,
         'Electronics': 10,
-        'Grocery_and_Gourmet_Food': 11,
-        'Health_and_Personal_Care': 12,
-        'Home_and_Kitchen': 13,
-        'Kindle_Store': 14,
-        'Movies_and_TV': 15,
-        'Musical_Instruments': 16,
-        'Office_Products': 17,
-        'Patio_Lawn_and_Garden': 18,
-        'Pet_Supplies': 19,
-        'Sports_and_Outdoors': 20,
-        'Tools_and_Home_Improvement': 21,
-        'Toys_and_Games': 22,
-        'Video_Games': 23
+        'Grocery and Gourmet Food': 11,
+        'Health and Personal Care': 12,
+        'Home and Kitchen': 13,
+        'Kindle Store': 14,
+        'Movies and TV': 15,
+        'Musical Instruments': 16,
+        'Office Products': 17,
+        'Patio Lawn and Garden': 18,
+        'Pet Supplies': 19,
+        'Sports and Outdoors': 20,
+        'Tools and Home Improvement': 21,
+        'Toys and Games': 22,
+        'Video Games': 23
     }
 
     val_classes = list(range(5))
     test_classes = list(range(5, 14))
     train_classes = list(range(14, 24))
 
-    return train_classes, val_classes, test_classes
+    return train_classes, val_classes, test_classes, label_dict
 
 
 def _get_huffpost_classes(args):
@@ -147,7 +147,7 @@ def _load_json(path):
         return data
 
 
-def _read_words(data):
+def _read_words(data, class_name_words):
     '''
         Count the occurrences of all words
         @param data: list of examples
@@ -156,6 +156,8 @@ def _read_words(data):
     words = []
     for example in data:
         words += example['text']
+    for example in class_name_words:
+        words += example
     return words
 
 
@@ -296,9 +298,9 @@ def _split_dataset(data, finetune_split):
 
 def load_dataset(args):
     if args.dataset == '20newsgroup':
-        train_classes, val_classes, test_classes = _get_20newsgroup_classes(args)
+        train_classes, val_classes, test_classes, label_dict = _get_20newsgroup_classes(args)
     elif args.dataset == 'amazon':
-        train_classes, val_classes, test_classes = _get_amazon_classes(args)
+        train_classes, val_classes, test_classes, label_dict = _get_amazon_classes(args)
     elif args.dataset == 'fewrel':
         train_classes, val_classes, test_classes = _get_fewrel_classes(args)
     elif args.dataset == 'huffpost':
@@ -316,18 +318,21 @@ def load_dataset(args):
     assert(len(val_classes) == args.n_val_class)
     assert(len(test_classes) == args.n_test_class)
 
-    if args.train_mode == 't_add_v':
-
-        train_classes = train_classes + val_classes
-        args.n_train_class = args.n_train_class + args.n_val_class
-
     tprint('Loading data')
     all_data = _load_json(args.data_path)
+    class_names = []
+    class_name_words = []
+    for ld in label_dict:
+        class_name_dic = {}
+        class_name_dic['label'] = label_dict[ld]
+        class_name_dic['text'] = ld.lower().split()
+        class_names.append(class_name_dic)
+        class_name_words.append(class_name_dic['text'])
 
     tprint('Loading word vectors')
 
     vectors = Vectors(args.word_vector, cache=args.wv_path)
-    vocab = Vocab(collections.Counter(_read_words(all_data)), vectors=vectors,
+    vocab = Vocab(collections.Counter(_read_words(all_data, class_name_words)), vectors=vectors,
                   specials=['<pad>', '<unk>'], min_freq=5)
 
     # print word embedding statistics
@@ -339,7 +344,7 @@ def load_dataset(args):
     num_oov = wv_size[0] - torch.nonzero(
             torch.sum(torch.abs(vocab.vectors), dim=1)).size()[0]
     tprint(('Num. of out-of-vocabulary words'
-           '(they are initialized to zeros): {}').format( num_oov))
+           '(they are initialized to zeros): {}').format(num_oov))
 
     # Split into meta-train, meta-val, meta-test data
     train_data, val_data, test_data = _meta_split(
@@ -348,11 +353,14 @@ def load_dataset(args):
         len(train_data), len(val_data), len(test_data)))
 
     # Convert everything into np array for fast data loading
+    class_names = _data_to_nparray(class_names, vocab, args)
     train_data = _data_to_nparray(train_data, vocab, args)
     val_data = _data_to_nparray(val_data, vocab, args)
     test_data = _data_to_nparray(test_data, vocab, args)
 
     train_data['is_train'] = True
+    val_data['is_train'] = True
+    test_data['is_train'] = True
     # this tag is used for distinguishing train/val/test when creating source pool
 
-    return train_data, val_data, test_data, vocab
+    return train_data, val_data, test_data, class_names, vocab

@@ -6,15 +6,13 @@ from train.train import train
 from train.test import test
 
 from tools.tool import parse_args, print_args, set_seed
-from tools.visualization import Print_Attention
+# from tools.visualization import Print_Attention
 
 import dataset.loader as loader
 from embedding.embedding import get_embedding
 
 
 def main():
-
-    # make_print_to_file(path='/results')
 
     args = parse_args()
 
@@ -23,24 +21,23 @@ def main():
     set_seed(args.seed)
 
     # load data
-    train_data, val_data, test_data, vocab = loader.load_dataset(args)
+    train_data, val_data, test_data, class_names, vocab = loader.load_dataset(args)
 
     args.id2word = vocab.itos
 
     # initialize model
     model = {}
-    model["G"], model["D"] = get_embedding(vocab, args)
-    model["clf"] = get_classifier(model["G"].ebd_dim, args)
+    model["G"] = get_embedding(vocab, args)
+    model["clf"] = get_classifier(model["G"].hidden_size * 2, args)
 
     if args.mode == "train":
         # train model on train_data, early stopping based on val_data
-        train(train_data, val_data, model, args)
+        optCLF = train(train_data, val_data, model, class_names, args)
 
     # val_acc, val_std, _ = test(val_data, model, args,
     #                                         args.val_episodes)
 
-    test_acc, test_std, drawn_data = test(test_data, model, args,
-                                          args.test_episodes)
+    test_acc, test_std = test(test_data, class_names, optCLF, model, args, args.test_epochs, False)
 
     # path_drawn = args.path_drawn_data
     # with open(path_drawn, 'w') as f_w:
