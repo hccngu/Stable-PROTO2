@@ -5,11 +5,9 @@ import copy
 import numpy as np
 
 from classifier.classifier_getter import get_classifier
-from train.test import test
 from tools.tool import parse_args, print_args, set_seed
 # from tools.visualization import Print_Attention
 import dataset.loader as loader
-from embedding.embedding import get_embedding
 import datetime
 from embedding.wordebd import WORDEBD
 import torch
@@ -22,6 +20,105 @@ from dataset import utils
 from tools.tool import neg_dist, reidx_y
 from tqdm import tqdm
 from termcolor import colored
+
+
+def get_embedding(vocab, args):
+    print("{}, Building embedding".format(
+        datetime.datetime.now()), flush=True)
+
+    ebd = WORDEBD(vocab, args.finetune_ebd)
+
+    modelG = ModelG(ebd, args)
+    # modelD = ModelD(ebd, args)
+
+    print("{}, Building embedding".format(
+        datetime.datetime.now()), flush=True)
+
+    if args.cuda != -1:
+        modelG = modelG.cuda(args.cuda)
+        # modelD = modelD.cuda(args.cuda)
+        return modelG  # , modelD
+    else:
+        return modelG  # , modelD
+
+
+class ModelG(nn.Module):
+
+    def __init__(self, ebd, args):
+        super(ModelG, self).__init__()
+
+        self.args = args
+
+        self.ebd = ebd
+
+        self.ebd_dim = self.ebd.embedding_dim
+        self.hidden_size = 128
+
+        # self.rnn = RNN(300, 128, 1, True, 0)
+        # self.lstm = nn.LSTM(input_size=300, hidden_size=128, num_layers=1, batch_first=True, dropout=0)
+        #
+        # self.seq = nn.Sequential(
+        #     nn.Linear(500, 1),
+        # )
+
+        self.fc = nn.Linear(300, 256)
+
+    def forward(self, data, flag=None, return_score=False):
+
+        ebd = self.ebd(data)
+        w2v = ebd
+
+        avg_sentence_ebd = torch.mean(w2v, dim=1)
+        print("avg_sentence_ebd.shape:", avg_sentence_ebd.shape)
+        avg_sentence_ebd = self.fc(avg_sentence_ebd)
+        print("avg_sentence_ebd_fc.shape:", avg_sentence_ebd.shape)
+        #
+        # # scale = self.compute_score(data, ebd)
+        # # print("\ndata.shape:", ebd.shape)  # [b, text_len, 300]
+        #
+        # # Generator部分
+        # ebd = self.rnn(ebd, data['text_len'])
+        # # ebd, (hn, cn) = self.lstm(ebd)
+        # # print("\ndata.shape:", ebd.shape)  # [b, text_len, 256]
+        # # for i, b in enumerate(ebd):
+        # ebd = ebd.transpose(1, 2).contiguous()  # # [b, text_len, 256] -> [b, 256, text_len]
+        #
+        # # [b, 256, text_len] -> [b, 256, 500]
+        # if ebd.shape[2] < 500:
+        #     zero = torch.zeros((ebd.shape[0], ebd.shape[1], 500-ebd.shape[2]))
+        #     if self.args.cuda != -1:
+        #        zero = zero.cuda(self.args.cuda)
+        #     ebd = torch.cat((ebd, zero), dim=-1)
+        #     # print('reverse_feature.shape[2]', ebd.shape[2])
+        # else:
+        #     ebd = ebd[:, :, :500]
+        #     # print('reverse_feature.shape[2]', ebd.shape[2])
+        #
+        # ebd = self.seq(ebd).squeeze(-1)  # [b, 256, 500] -> [b, 256]
+        # ebd = torch.max(ebd, dim=-1, keepdim=False)[0]
+        # print("\ndata.shape:", ebd.shape)  # [b, text_len]
+        # word_weight = F.softmax(ebd, dim=-1)
+        # print("word_weight.shape:", word_weight.shape)  # [b, text_len]
+        # sentence_ebd = torch.sum((torch.unsqueeze(word_weight, dim=-1)) * w2v, dim=-2)
+        # print("sentence_ebd.shape:", sentence_ebd.shape)
+
+        # reverse_feature = word_weight
+        #
+        # if reverse_feature.shape[1] < 500:
+        #     zero = torch.zeros((reverse_feature.shape[0], 500-reverse_feature.shape[1]))
+        #     if self.args.cuda != -1:
+        #        zero = zero.cuda(self.args.cuda)
+        #     reverse_feature = torch.cat((reverse_feature, zero), dim=-1)
+        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
+        # else:
+        #     reverse_feature = reverse_feature[:, :500]
+        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
+        #
+        # if self.args.ablation == '-IL':
+        #     sentence_ebd = torch.cat((avg_sentence_ebd, sentence_ebd), 1)
+        #     print("%%%%%%%%%%%%%%%%%%%%This is ablation mode: -IL%%%%%%%%%%%%%%%%%%")
+
+        return avg_sentence_ebd
 
 
 class Model2(nn.Module):
@@ -135,13 +232,23 @@ def train_one(task, class_names_dict, model, optG, optG2, optCLF, args, grad):
     cn_loss_all = 0
     for _ in range(5):
         CN = model['G'](class_names_dict)  # CN:[N, 256(hidden_size*2)]
-        print("CN:", CN)
+        # print("CN:", CN)
         dis = neg_dist(CN, CN) / torch.mean(neg_dist(CN, CN), dim=0)  # [N, N]
-        print("dis:", dis)
-        cn_loss = torch.sum(dis) / 5
+        # print("dis:", dis)
+        m = torch.tensor(2.0).cuda()
+        cn_loss = torch.tensor(0.0).cuda()
+        for i, d in enumerate(dis):
+            for j, dd in enumerate(d):
+                if i != j:
+                    cn_loss = cn_loss + ((torch.max(torch.tensor(0.0).cuda(), m + dd))**2) / 2 / 20
+                    print("cn_loss:", cn_loss)
+        # cn_loss = cn_loss
+        print("********************cn_loss:", cn_loss)
         cn_loss_all += cn_loss
+        for name,param in model['G'].named_parameters():
+            print("name:", name, "param:", param)
         optG.zero_grad()
-        cn_loss.backward(retain_graph=True)
+        cn_loss.backward()
         optG.step()
     print('***********cn_loss:', cn_loss_all/5)
 
@@ -336,6 +443,7 @@ def train(train_data, val_data, model, class_names, args):
                     best_path))
 
                 torch.save(model['G'].state_dict(), best_path + '.G')
+                torch.save(model['G2'].state_dict(), best_path + '.G2')
                 torch.save(model['clf'].state_dict(), best_path + '.clf')
 
                 sub_cycle = 0
@@ -360,6 +468,7 @@ def train(train_data, val_data, model, class_names, args):
 
     # restore the best saved model
     model['G'].load_state_dict(torch.load(best_path + '.G'))
+    model['G2'].load_state_dict(torch.load(best_path + '.G2'))
     model['clf'].load_state_dict(torch.load(best_path + '.clf'))
 
     if args.save:
