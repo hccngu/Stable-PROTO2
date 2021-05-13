@@ -12,7 +12,7 @@ from dataset import utils
 from tools.tool import reidx_y, neg_dist
 
 
-def test_one(task, class_names_dict, model, optCLF, args, grad):
+def test_one(task, class_names, model, optCLF, args, grad):
     '''
         Train the model on one sampled task.
     '''
@@ -22,6 +22,17 @@ def test_one(task, class_names_dict, model, optCLF, args, grad):
     support, query = task
     # print("support, query:", support, query)
     # print("class_names_dict:", class_names_dict)
+
+    sampled_classes = torch.unique(support['label']).cpu().numpy().tolist()
+    # print("sampled_classes:", sampled_classes)
+
+    class_names_dict = {}
+    class_names_dict['label'] = class_names['label'][sampled_classes]
+    # print("class_names_dict['label']:", class_names_dict['label'])
+    class_names_dict['text'] = class_names['text'][sampled_classes]
+    class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
+    class_names_dict['is_support'] = False
+    class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
     # Embedding the document
     XS = model['G'](support)  # XS:[N*K, 256(hidden_size*2)]
@@ -98,16 +109,16 @@ def test(test_data, class_names, optCLF, model, args, num_episodes, verbose=True
         # else:
         #     acc.append(test_one(task, model, args))
         sampled_classes, source_classes = task_sampler(test_data, args)
-        class_names_dict = {}
-        class_names_dict['label'] = class_names['label'][sampled_classes]
-        class_names_dict['text'] = class_names['text'][sampled_classes]
-        class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
-        class_names_dict['is_support'] = False
+        # class_names_dict = {}
+        # class_names_dict['label'] = class_names['label'][sampled_classes]
+        # class_names_dict['text'] = class_names['text'][sampled_classes]
+        # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
+        # class_names_dict['is_support'] = False
 
         train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
-        class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
+        # class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
         grad = {'clf': [], 'G': []}
 
@@ -119,7 +130,7 @@ def test(test_data, class_names, optCLF, model, args, num_episodes, verbose=True
         for task in sampled_tasks:
             if task is None:
                 break
-            q_acc = test_one(task, class_names_dict, model, optCLF, args, grad)
+            q_acc = test_one(task, class_names, model, optCLF, args, grad)
             acc.append(q_acc.cpu().item())
 
     acc = np.array(acc)

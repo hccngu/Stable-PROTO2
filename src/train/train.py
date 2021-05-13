@@ -61,17 +61,17 @@ def train(train_data, val_data, model, class_names, args):
     for ep in range(args.train_epochs):
 
         sampled_classes, source_classes = task_sampler(train_data, args)
-        class_names_dict = {}
-        class_names_dict['label'] = class_names['label'][sampled_classes]
-        class_names_dict['text'] = class_names['text'][sampled_classes]
-        class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
-        class_names_dict['is_support'] = False
+        # class_names_dict = {}
+        # class_names_dict['label'] = class_names['label'][sampled_classes]
+        # class_names_dict['text'] = class_names['text'][sampled_classes]
+        # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
+        # class_names_dict['is_support'] = False
 
 
         train_gen = ParallelSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
-        class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
+        # class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
         grad = {'clf': [], 'G': []}
 
@@ -83,26 +83,26 @@ def train(train_data, val_data, model, class_names, args):
         for task in sampled_tasks:
             if task is None:
                 break
-            q_loss, q_acc = train_one(task, class_names_dict, model, optG, optCLF, args, grad)
+            q_loss, q_acc = train_one(task, class_names, model, optG, optCLF, args, grad)
             acc += q_acc
             loss += q_loss
 
         if ep % 100 == 0:
             print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(q_acc.item()) + "-----------")
 
-        if (ep % 200 == 0) and (ep != 0):
+        if (ep % 500 == 0) and (ep != 0):
             acc = acc / args.train_episodes / 200
             loss = loss / args.train_episodes / 200
             print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(acc.item()) + "-----------")
 
             net = copy.deepcopy(model)
-            acc, std = test(train_data, class_names, optCLF, net, args, args.test_epochs, False)
-            print("[TRAIN] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f} ".format(
-                datetime.datetime.now(),
-                "ep", ep,
-                colored("train", "red"),
-                colored("acc:", "blue"), acc, std,
-                ), flush=True)
+            # acc, std = test(train_data, class_names, optCLF, net, args, args.test_epochs, False)
+            # print("[TRAIN] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f} ".format(
+            #     datetime.datetime.now(),
+            #     "ep", ep,
+            #     colored("train", "red"),
+            #     colored("acc:", "blue"), acc, std,
+            #     ), flush=True)
             acc = 0
             loss = 0
 
@@ -181,7 +181,7 @@ def train(train_data, val_data, model, class_names, args):
     return optCLF
 
 
-def train_one(task, class_names_dict, model, optG, optCLF, args, grad):
+def train_one(task, class_names, model, optG, optCLF, args, grad):
     '''
         Train the model on one sampled task.
     '''
@@ -191,6 +191,17 @@ def train_one(task, class_names_dict, model, optG, optCLF, args, grad):
     support, query = task
     # print("support, query:", support, query)
     # print("class_names_dict:", class_names_dict)
+    sampled_classes = torch.unique(support['label']).cpu().numpy().tolist()
+    # print("sampled_classes:", sampled_classes)
+
+    class_names_dict = {}
+    class_names_dict['label'] = class_names['label'][sampled_classes]
+    # print("class_names_dict['label']:", class_names_dict['label'])
+    class_names_dict['text'] = class_names['text'][sampled_classes]
+    class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
+    class_names_dict['is_support'] = False
+    class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
+
 
     # Embedding the document
     XS = model['G'](support)  # XS:[N*K, 256(hidden_size*2)]

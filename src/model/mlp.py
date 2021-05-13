@@ -23,7 +23,7 @@ class MLP(nn.Module):
         return logits
 
     def loss(self, logits, label):
-        loss_ce = self.cost(logits/torch.mean(logits, dim=0), label)
+        loss_ce = self.cost(-logits/torch.mean(logits, dim=0), label)
 
         return loss_ce
 

@@ -40,10 +40,10 @@ python ../src/main.py \
     --n_test_class=$n_test_class \
     --train_episodes 1 \
     --test_epochs 200 \
-    --train_iter 5 \
-    --test_iter 10 \
+    --train_iter 10 \
+    --test_iter 15 \
     --meta_lr 1e-3 \
-    --task_lr 1 \
+    --task_lr 7e-1 \
     --Comments "amazon" \
     --patience 20 \
     --seed 3 \
