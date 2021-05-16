@@ -365,7 +365,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
     support['text_len'] = torch.cat((support['text_len'], class_names_dict['text_len']), dim=0)
     support['label'] = torch.cat((support['label'], class_names_dict['label']), dim=0)
-    print("support['text']:", support['text'].shape)
+    # print("support['text']:", support['text'].shape)
     # print("support['label']:", support['label'])
 
     text_sample_len = support['text'].shape[0]
@@ -433,8 +433,8 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
         loss = criterion(S_out1, S_out2, support['label_final'])
         zero_grad(orderd_params.values())
         grads = torch.autograd.grad(loss, orderd_params.values(), allow_unused=True)
-        print('grads:', grads)
-        print("orderd_params.items():", orderd_params.items())
+        # print('grads:', grads)
+        # print("orderd_params.items():", orderd_params.items())
         for (key, val), grad in zip(orderd_params.items(), grads):
             if grad is not None:
                 fast_weights[key] = orderd_params[key] = val - args.task_lr * grad
@@ -602,24 +602,25 @@ def train(train_data, val_data, model, class_names, criterion, args):
         if ep % 100 == 0:
             print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(q_acc.item()) + "-----------")
 
-        if (ep % 200 == 0) and (ep != 0):
-            acc = acc / args.train_episodes / 200
-            loss = loss / args.train_episodes / 200
+        test_count = 500
+        if (ep % test_count == 0) and (ep != 0):
+            acc = acc / args.train_episodes / test_count
+            loss = loss / args.train_episodes / test_count
             print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(acc.item()) + "-----------")
 
             net = copy.deepcopy(model)
-            acc, std = test(train_data, class_names, optG, optCLF, net, args, args.test_epochs, False)
-            print("[TRAIN] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f} ".format(
-                datetime.datetime.now(),
-                "ep", ep,
-                colored("train", "red"),
-                colored("acc:", "blue"), acc, std,
-                ), flush=True)
+            # acc, std = test(train_data, class_names, optG, net, criterion, args, args.test_epochs, False)
+            # print("[TRAIN] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f} ".format(
+            #     datetime.datetime.now(),
+            #     "ep", ep,
+            #     colored("train", "red"),
+            #     colored("acc:", "blue"), acc, std,
+            #     ), flush=True)
             acc = 0
             loss = 0
 
             # Evaluate validation accuracy
-            cur_acc, cur_std = test(val_data, class_names, optG, optCLF, net, args, args.test_epochs, False)
+            cur_acc, cur_std = test(val_data, class_names, optG, net, criterion, args, args.test_epochs, False)
             print(("[EVAL] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f}, "
                    "{:s} {:s}{:>7.4f}, {:s}{:>7.4f}").format(
                    datetime.datetime.now(),
@@ -642,8 +643,8 @@ def train(train_data, val_data, model, class_names, criterion, args):
                     best_path))
 
                 torch.save(model['G'].state_dict(), best_path + '.G')
-                torch.save(model['G2'].state_dict(), best_path + '.G2')
-                torch.save(model['clf'].state_dict(), best_path + '.clf')
+                # torch.save(model['G2'].state_dict(), best_path + '.G2')
+                # torch.save(model['clf'].state_dict(), best_path + '.clf')
 
                 sub_cycle = 0
             else:
@@ -655,11 +656,11 @@ def train(train_data, val_data, model, class_names, criterion, args):
 
             if args.lr_scheduler == 'ReduceLROnPlateau':
                 schedulerG.step(cur_acc)
-                schedulerCLF.step(cur_acc)
+                # schedulerCLF.step(cur_acc)
 
             elif args.lr_scheduler == 'ExponentialLR':
                 schedulerG.step()
-                schedulerCLF.step()
+                # schedulerCLF.step()
 
     print("{}, End of training. Restore the best weights".format(
             datetime.datetime.now()),
@@ -667,8 +668,8 @@ def train(train_data, val_data, model, class_names, criterion, args):
 
     # restore the best saved model
     model['G'].load_state_dict(torch.load(best_path + '.G'))
-    model['G2'].load_state_dict(torch.load(best_path + '.G2'))
-    model['clf'].load_state_dict(torch.load(best_path + '.clf'))
+    # model['G2'].load_state_dict(torch.load(best_path + '.G2'))
+    # model['clf'].load_state_dict(torch.load(best_path + '.clf'))
 
     if args.save:
         # save the current model
@@ -686,16 +687,16 @@ def train(train_data, val_data, model, class_names, criterion, args):
             best_path), flush=True)
 
         torch.save(model['G'].state_dict(), best_path + '.G')
-        torch.save(model['clf'].state_dict(), best_path + '.clf')
+        # torch.save(model['clf'].state_dict(), best_path + '.clf')
 
         with open(best_path + '_args.txt', 'w') as f:
             for attr, value in sorted(args.__dict__.items()):
                 f.write("{}={}\n".format(attr, value))
 
-    return optG, optCLF
+    return optG
 
 
-def test_one(task, class_names_dict, model, optG, optCLF, args, grad):
+def test_one(task, class_names, model, optG, criterion, args, grad):
     '''
         Train the model on one sampled task.
     '''
@@ -704,68 +705,124 @@ def test_one(task, class_names_dict, model, optG, optCLF, args, grad):
     # print("support, query:", support, query)
     # print("class_names_dict:", class_names_dict)
 
-    '第一步：更新G，让类描述相互离得远一些'
-    cn_loss_all = 0
-    for _ in range(5):
-        CN = model['G'](class_names_dict)  # CN:[N, 256(hidden_size*2)]
-        # print("CN:", CN.shape)
-        dis = neg_dist(CN, CN)  # [N, N]
-        cn_loss = torch.sum(dis) - torch.sum(torch.diag(dis))
-        cn_loss_all += cn_loss
-        optG.zero_grad()
-        cn_loss.backward(retain_graph=True)
-        optG.step()
-    print('***********[TEST] cn_loss:', cn_loss_all / 5)
-
-    '把CN过微调过的G， S和Q过G2'
-    # Embedding the document
-    XS = model['G2'](support)  # XS:[N*K, 256(hidden_size*2)]
-    # print("XS:", XS.shape)
+    '''分样本对'''
     YS = support['label']
-    # print('YS:', YS)
-
-    CN = model['G'](class_names_dict)  # CN:[N, 256(hidden_size*2)]]
-    # print("CN:", CN.shape)
-
-    XQ = model['G2'](query)
     YQ = query['label']
-    # print('YQ:', YQ)
+
+    sampled_classes = torch.unique(support['label']).cpu().numpy().tolist()
+    # print("sampled_classes:", sampled_classes)
+
+    class_names_dict = {}
+    class_names_dict['label'] = class_names['label'][sampled_classes]
+    # print("class_names_dict['label']:", class_names_dict['label'])
+    class_names_dict['text'] = class_names['text'][sampled_classes]
+    class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
+    class_names_dict['is_support'] = False
+    class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
     YS, YQ = reidx_y(args, YS, YQ)
+    # print('YS:', support['label'])
+    # print('YQ:', query['label'])
+    # print("class_names_dict:", class_names_dict['label'])
 
-    '第二步：用Support更新MLP'
-    for _ in range(args.test_iter):
+    """维度填充"""
+    if support['text'].shape[1] != class_names_dict['text'].shape[1]:
+        zero = torch.zeros((class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]), dtype=torch.long)
+        class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
 
-        # Embedding the document
-        XS_mlp = model['clf'](XS)  # [N*K, 256(hidden_size*2)] -> [N*K, 256]
+    support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
+    support['text_len'] = torch.cat((support['text_len'], class_names_dict['text_len']), dim=0)
+    support['label'] = torch.cat((support['label'], class_names_dict['label']), dim=0)
+    # print("support['text']:", support['text'].shape)
+    # print("support['label']:", support['label'])
 
-        neg_d = neg_dist(XS_mlp, CN)  # [N*K, N]
-        # print("neg_d:", neg_d.shape)
+    text_sample_len = support['text'].shape[0]
+    # print("support['text'].shape[0]:", support['text'].shape[0])
+    support['text_1'] = support['text'][0].view((1, -1))
+    support['text_len_1'] = support['text_len'][0].view(-1)
+    support['label_1'] = support['label'][0].view(-1)
+    for i in range(text_sample_len):
+        if i == 0:
+            for j in range(1, text_sample_len):
+                support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
+                support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
+                support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
+        else:
+            for j in range(text_sample_len):
+                support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
+                support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
+                support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-        mlp_loss = model['clf'].loss(neg_d, YS)
-        # print("mlp_loss:", mlp_loss)
+    support['text_2'] = support['text'][0].view((1, -1))
+    support['text_len_2'] = support['text_len'][0].view(-1)
+    support['label_2'] = support['label'][0].view(-1)
+    for i in range(text_sample_len):
+        if i == 0:
+            for j in range(1, text_sample_len):
+                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
+                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+        else:
+            for j in range(text_sample_len):
+                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
+                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
 
-        optCLF.zero_grad()
-        mlp_loss.backward(retain_graph=True)
-        optCLF.step()
+    # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
+    # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
+    support['label_final'] = support['label_1'].eq(support['label_2']).int()
 
-    XQ_mlp = model['clf'](XQ)
-    neg_d = neg_dist(XQ_mlp, CN)
+    support_1 = {}
+    support_1['text'] = support['text_1']
+    support_1['text_len'] = support['text_len_1']
+    support_1['label'] = support['label_1']
 
-    _, pred = torch.max(neg_d, 1)
-    acc_q = model['clf'].accuracy(pred, YQ)
+    support_2 = {}
+    support_2['text'] = support['text_2']
+    support_2['text_len'] = support['text_len_2']
+    support_2['label'] = support['label_2']
+    # print("**************************************")
+    # print("1111111", support['label_1'])
+    # print("2222222", support['label_2'])
+    # print(support['label_final'])
+
+
+    '''first step'''
+    S_out1, S_out2 = model['G'](support_1, support_2)
+    loss = criterion(S_out1, S_out2, support['label_final'])
+    zero_grad(model['G'].parameters())
+    grads = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True)
+    fast_weights, orderd_params = model['G'].cloned_fc_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads):
+        fast_weights[key] = orderd_params[key] = val-args.task_lr*grad
+    '''steps remaining'''
+    for k in range(args.train_iter - 1):
+        S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
+        loss = criterion(S_out1, S_out2, support['label_final'])
+        zero_grad(orderd_params.values())
+        grads = torch.autograd.grad(loss, orderd_params.values(), allow_unused=True)
+        # print('grads:', grads)
+        # print("orderd_params.items():", orderd_params.items())
+        for (key, val), grad in zip(orderd_params.items(), grads):
+            if grad is not None:
+                fast_weights[key] = orderd_params[key] = val - args.task_lr * grad
+
+    """计算Q上的损失"""
+    CN = model['G'].forward_once_with_param(class_names_dict, fast_weights)
+    XQ = model['G'].forward_once_with_param(query, fast_weights)
+    logits_q = neg_dist(XQ, CN)
+    _, pred = torch.max(logits_q, 1)
+    acc_q = model['G'].accuracy(pred, YQ)
 
     return acc_q
 
 
-def test(test_data, class_names, optG, optCLF, model, args, num_episodes, verbose=True):
+def test(test_data, class_names, optG, model, criterion, args, num_episodes, verbose=True):
     '''
         Evaluate the model on a bag of sampled tasks. Return the mean accuracy
         and its std.
     '''
     model['G'].train()
-    model['G2'].train()
-    model['clf'].train()
 
     acc = []
     for ep in range(num_episodes):
@@ -792,16 +849,16 @@ def test(test_data, class_names, optG, optCLF, model, args, num_episodes, verbos
         # else:
         #     acc.append(test_one(task, model, args))
         sampled_classes, source_classes = task_sampler(test_data, args)
-        class_names_dict = {}
-        class_names_dict['label'] = class_names['label'][sampled_classes]
-        class_names_dict['text'] = class_names['text'][sampled_classes]
-        class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
-        class_names_dict['is_support'] = False
+        # class_names_dict = {}
+        # class_names_dict['label'] = class_names['label'][sampled_classes]
+        # class_names_dict['text'] = class_names['text'][sampled_classes]
+        # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
+        # class_names_dict['is_support'] = False
 
         train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
-        class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
+        # class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
         grad = {'clf': [], 'G': []}
 
@@ -813,7 +870,7 @@ def test(test_data, class_names, optG, optCLF, model, args, num_episodes, verbos
         for task in sampled_tasks:
             if task is None:
                 break
-            q_acc = test_one(task, class_names_dict, model, optG, optCLF, args, grad)
+            q_acc = test_one(task, class_names, model, optG, criterion, args, grad)
             acc.append(q_acc.cpu().item())
 
     acc = np.array(acc)
@@ -862,12 +919,12 @@ def main():
 
     if args.mode == "train":
         # train model on train_data, early stopping based on val_data
-        optG, optCLF = train(train_data, val_data, model, class_names, criterion, args)
+        optG = train(train_data, val_data, model, class_names, criterion, args)
 
     # val_acc, val_std, _ = test(val_data, model, args,
     #                                         args.val_episodes)
 
-    test_acc, test_std = test(test_data, class_names, optG, optCLF, model, args, args.test_epochs, False)
+    test_acc, test_std = test(test_data, class_names, optG, model, criterion, args, args.test_epochs, False)
 
     # path_drawn = args.path_drawn_data
     # with open(path_drawn, 'w') as f_w:
