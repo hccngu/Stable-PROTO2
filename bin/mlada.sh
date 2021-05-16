@@ -4,12 +4,12 @@
 #n_train_class=8
 #n_val_class=5
 #n_test_class=7
-#
-dataset=amazon
-data_path="../data/amazon.json"
-n_train_class=10
-n_val_class=5
-n_test_class=9
+
+#dataset=amazon
+#data_path="../data/amazon.json"
+#n_train_class=10
+#n_val_class=5
+#n_test_class=9
 #
 #dataset=huffpost
 #data_path="../data/huffpost.json"
@@ -17,11 +17,12 @@ n_test_class=9
 #n_val_class=5
 #n_test_class=16
 #
-#dataset=reuters
-#data_path="../data/reuters.json"
-#n_train_class=15
-#n_val_class=5
-#n_test_class=11
+#
+dataset=reuters
+data_path="../data/reuters.json"
+n_train_class=15
+n_val_class=5
+n_test_class=11
 #
 
 
