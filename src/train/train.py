@@ -91,8 +91,8 @@ def train(train_data, val_data, model, class_names, args):
             print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(q_acc.item()) + "-----------")
 
         if (ep % 500 == 0) and (ep != 0):
-            acc = acc / args.train_episodes / 200
-            loss = loss / args.train_episodes / 200
+            acc = acc / args.train_episodes / 500
+            loss = loss / args.train_episodes / 500
             print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(acc.item()) + "-----------")
 
             net = copy.deepcopy(model)

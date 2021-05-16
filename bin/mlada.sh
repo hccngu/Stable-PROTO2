@@ -45,7 +45,7 @@ python ../src/main.py \
     --test_iter 15 \
     --meta_lr 1e-3 \
     --task_lr 7e-1 \
-    --Comments "amazon" \
+    --Comments "reuters" \
     --patience 20 \
     --seed 3 \
     --notqdm \
