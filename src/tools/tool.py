@@ -88,6 +88,7 @@ def parse_args():
     parser.add_argument("--path_drawn_data", type=str, default="reuters_False_data.json", help="path_drawn_data")
     parser.add_argument("--Comments", type=str, default="", help="Comments")
     parser.add_argument("--id2word", default=None, help="id2word")
+    parser.add_argument("--task_num", type=int, default=4, help="Number of tasks")
 
     return parser.parse_args()
 

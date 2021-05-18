@@ -11,7 +11,7 @@ class MLP(nn.Module):
         self.ebd = ebd
 
         self.d = nn.Sequential(
-                nn.Dropout(0.2),
+                nn.Dropout(0.6),
                 nn.Linear(ebd, 256),
                 )
         self.cost = nn.CrossEntropyLoss()

@@ -43,8 +43,8 @@ python ../src/main.py \
     --test_epochs 200 \
     --train_iter 10 \
     --test_iter 15 \
-    --meta_lr 1e-3 \
-    --task_lr 7e-1 \
+    --meta_lr 7e-4 \
+    --task_lr 7e-2 \
     --Comments "reuters" \
     --patience 20 \
     --seed 3 \
