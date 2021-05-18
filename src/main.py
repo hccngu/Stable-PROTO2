@@ -27,7 +27,7 @@ def main():
 
     # initialize model
     model = {}
-    model["G"] = get_embedding(vocab, args)
+    model["G"] = get_embedding(vocab, args)  #main里面这里是最原始的pytorch的Embedding层
     model["clf"] = get_classifier(model["G"].hidden_size * 2, args)
 
     if args.mode == "train":
