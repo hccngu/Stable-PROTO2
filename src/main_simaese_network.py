@@ -185,9 +185,10 @@ class ContrastiveLoss(torch.nn.Module):
         self.margin = margin
 
     def forward(self, output1, output2, label):
-        euclidean_distance = F.pairwise_distance(output1, output2, keepdim = True)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+        euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
+        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance, dim=0)
+        loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
+                                      (1-label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
 
         return loss_contrastive
 
@@ -322,7 +323,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         loss = criterion(S_out1, S_out2, support['label_final'])
-        # print("s_loss:", loss)
+        # print("train_iter: {} s_loss:{}".format(k, loss))
         zero_grad(orderd_params_fc.values())
         zero_grad(orderd_params_conv11.values())
         zero_grad(orderd_params_conv12.values())
@@ -355,6 +356,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     logits_q = neg_dist(XQ, CN)
     # print("logits_q:", logits_q)
     q_loss = model['G'].loss(logits_q, YQ)
+    # print("q_loss:", q_loss)
     _, pred = torch.max(logits_q, 1)
     acc_q = model['G'].accuracy(pred, YQ)
 
@@ -465,9 +467,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
                    "ep", ep,
                    colored("val  ", "cyan"),
                    colored("acc:", "blue"), cur_acc, cur_std,
-                   colored("train stats", "cyan"),
-                   colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
-                   colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
+                   # colored("train stats", "cyan"),
+                   # colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
+                   # colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
                    ), flush=True)
 
             # Update the current best model if val acc is better
@@ -628,22 +630,64 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     loss = criterion(S_out1, S_out2, support['label_final'])
+    # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
-    grads = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True)
-    fast_weights, orderd_params = model['G'].cloned_fc_dict(), OrderedDict()
-    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads):
-        fast_weights[key] = orderd_params[key] = val-args.task_lr*grad
+
+    grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_fc, orderd_params_fc = model['G'].cloned_fc_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads_fc):
+        fast_weights_fc[key] = orderd_params_fc[key] = val-args.task_lr*grad
+
+    grads_conv11 = autograd.grad(loss, model['G'].conv11.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv11, orderd_params_conv11 = model['G'].cloned_conv11_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv11.named_parameters(), grads_conv11):
+        fast_weights_conv11[key] = orderd_params_conv11[key] = val - args.task_lr * grad
+
+    grads_conv12 = autograd.grad(loss, model['G'].conv12.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv12, orderd_params_conv12 = model['G'].cloned_conv12_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv12.named_parameters(), grads_conv12):
+        fast_weights_conv12[key] = orderd_params_conv12[key] = val - args.task_lr * grad
+
+    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
+        fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
+
+    fast_weights = {}
+    fast_weights['fc'] = fast_weights_fc
+    fast_weights['conv11'] = fast_weights_conv11
+    fast_weights['conv12'] = fast_weights_conv12
+    fast_weights['conv13'] = fast_weights_conv13
+
     '''steps remaining'''
-    for k in range(args.train_iter - 1):
+    for k in range(args.test_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         loss = criterion(S_out1, S_out2, support['label_final'])
-        zero_grad(orderd_params.values())
-        grads = torch.autograd.grad(loss, orderd_params.values(), allow_unused=True)
-        # print('grads:', grads)
-        # print("orderd_params.items():", orderd_params.items())
-        for (key, val), grad in zip(orderd_params.items(), grads):
+        # print("train_iter: {} s_loss:{}".format(k, loss))
+        zero_grad(orderd_params_fc.values())
+        zero_grad(orderd_params_conv11.values())
+        zero_grad(orderd_params_conv12.values())
+        zero_grad(orderd_params_conv13.values())
+        grads_fc = torch.autograd.grad(loss, orderd_params_fc.values(), allow_unused=True, retain_graph=True)
+        grads_conv11 = torch.autograd.grad(loss, orderd_params_conv11.values(), allow_unused=True, retain_graph=True)
+        grads_conv12 = torch.autograd.grad(loss, orderd_params_conv12.values(), allow_unused=True, retain_graph=True)
+        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True, retain_graph=True)
+
+        for (key, val), grad in zip(orderd_params_fc.items(), grads_fc):
             if grad is not None:
-                fast_weights[key] = orderd_params[key] = val - args.task_lr * grad
+                fast_weights['fc'][key] = orderd_params_fc[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv11.items(), grads_conv11):
+            if grad is not None:
+                fast_weights['conv11'][key] = orderd_params_conv11[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv12.items(), grads_conv12):
+            if grad is not None:
+                fast_weights['conv12'][key] = orderd_params_conv12[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv13.items(), grads_conv13):
+            if grad is not None:
+                fast_weights['conv13'][key] = orderd_params_conv13[key] = val - args.task_lr * grad
 
     """计算Q上的损失"""
     CN = model['G'].forward_once_with_param(class_names_dict, fast_weights)
@@ -664,39 +708,12 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
     acc = []
     for ep in range(num_episodes):
-        # if args.embedding == 'mlada':
-        #     acc1, d_acc1, sentence_ebd, avg_sentence_ebd, sentence_label, word_weight, query_data, x_hat = test_one(task, model, args)
-        #     if count < 20:
-        #         if all_sentence_ebd is None:
-        #             all_sentence_ebd = sentence_ebd
-        #             all_avg_sentence_ebd = avg_sentence_ebd
-        #             all_sentence_label = sentence_label
-        #             all_word_weight = word_weight
-        #             all_query_data = query_data
-        #             all_x_hat = x_hat
-        #         else:
-        #             all_sentence_ebd = np.concatenate((all_sentence_ebd, sentence_ebd), 0)
-        #             all_avg_sentence_ebd = np.concatenate((all_avg_sentence_ebd, avg_sentence_ebd), 0)
-        #             all_sentence_label = np.concatenate((all_sentence_label, sentence_label))
-        #             all_word_weight = np.concatenate((all_word_weight, word_weight), 0)
-        #             all_query_data = np.concatenate((all_query_data, query_data), 0)
-        #             all_x_hat = np.concatenate((all_x_hat, x_hat), 0)
-        #     count = count + 1
-        #     acc.append(acc1)
-        #     d_acc.append(d_acc1)
-        # else:
-        #     acc.append(test_one(task, model, args))
+
         sampled_classes, source_classes = task_sampler(test_data, args)
-        # class_names_dict = {}
-        # class_names_dict['label'] = class_names['label'][sampled_classes]
-        # class_names_dict['text'] = class_names['text'][sampled_classes]
-        # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
-        # class_names_dict['is_support'] = False
 
         train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
-        # class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
         grad = {'clf': [], 'G': []}
 

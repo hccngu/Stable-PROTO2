@@ -36,7 +36,7 @@ def parse_args():
 
     parser.add_argument("--train_epochs", type=int, default=10000,
                         help="max num of training epochs")
-    parser.add_argument("--train_episodes", type=int, default=2,
+    parser.add_argument("--train_episodes", type=int, default=1,
                         help="#tasks sampled during each training epoch")
     parser.add_argument("--val_epochs", type=int, default=100,
                         help="#asks sampled during each validation epoch")
