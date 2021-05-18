@@ -58,7 +58,7 @@ def parse_args():
     parser.add_argument("--auxiliary", type=str, nargs="*", default=[],
                         help=("auxiliary embeddings (used for fewrel)."))
     parser.add_argument("--seed", type=int, default=330, help="seed")
-    parser.add_argument("--dropout", type=float, default=0.1, help="drop rate")
+    parser.add_argument("--dropout", type=float, default=0.5, help="drop rate")
     parser.add_argument("--patience", type=int, default=20, help="patience")
     parser.add_argument("--clip_grad", type=float, default=None,
                         help="gradient clipping")
@@ -89,6 +89,11 @@ def parse_args():
     parser.add_argument("--Comments", type=str, default="", help="Comments")
     parser.add_argument("--id2word", default=None, help="id2word")
     parser.add_argument("--task_num", type=int, default=4, help="Number of tasks")
+
+
+    # TextCNN
+    parser.add_argument("--kernel_num", type=int, default=16, help="kernel number: output size of one kernel")
+    parser.add_argument("--kernel_size", default=[3, 4, 5], help="kernel size list")
 
     return parser.parse_args()
 
