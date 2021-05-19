@@ -11,12 +11,11 @@ import dataset.loader as loader
 import datetime
 from embedding.wordebd import WORDEBD
 import torch
-from torch import optim
 import torch.nn as nn
 from embedding.rnn import RNN
 import torch.nn.functional as F
 from train.utils import grad_param, get_norm
-from dataset.sampler import ParallelSampler, ParallelSampler_Test, task_sampler
+from dataset.sampler2 import SerialSampler, task_sampler
 from dataset import utils
 from tools.tool import neg_dist, reidx_y
 from tqdm import tqdm
@@ -37,31 +36,31 @@ def get_embedding(vocab, args):
 
     ebd = WORDEBD(vocab, args.finetune_ebd)
 
-    model_TextCNN = Model_TextCNN(ebd, args)
+    modelG = ModelG(ebd, args)
     # modelD = ModelD(ebd, args)
 
     print("{}, Building embedding".format(
         datetime.datetime.now()), flush=True)
 
     if args.cuda != -1:
-        model_TextCNN = model_TextCNN.cuda(args.cuda)
+        modelG = modelG.cuda(args.cuda)
         # modelD = modelD.cuda(args.cuda)
-        return model_TextCNN  # , modelD
+        return modelG  # , modelD
     else:
-        return model_TextCNN  # , modelD
+        return modelG  # , modelD
 
 
-class Model_TextCNN(nn.Module):
+class ModelG(nn.Module):
 
-    def __init__(self, ebd, args, config):
-        super(Model_TextCNN, self).__init__()
+    def __init__(self, ebd, args):
+        super(ModelG, self).__init__()
 
         self.args = args
 
         self.ebd = ebd
 
-        # self.ebd_dim = self.ebd.embedding_dim
-        # self.hidden_size = 128
+        self.ebd_dim = self.ebd.embedding_dim
+        self.hidden_size = 128
 
         # self.rnn = RNN(300, 128, 1, True, 0)
         # self.lstm = nn.LSTM(input_size=300, hidden_size=128, num_layers=1, batch_first=True, dropout=0)
@@ -70,99 +69,8 @@ class Model_TextCNN(nn.Module):
         #     nn.Linear(500, 1),
         # )
 
-        # self.fc = nn.Linear(300, 256)
-        # self.cost = nn.CrossEntropyLoss()
-
-        self.config = config
-
-        # this dict contains all tensors needed to be optimized
-        self.vars = nn.ParameterList()
-        # running_mean and running_var
-        self.vars_bn = nn.ParameterList()
-
-        for i, (name, param) in enumerate(self.config):
-            if name is 'conv2d':
-                # [ch_out, ch_in, kernelsz, kernelsz]
-                w = nn.Parameter(torch.ones(*param[:4]))
-                # gain=1 according to cbfin's implementation
-                torch.nn.init.kaiming_normal_(w)
-                self.vars.append(w)
-                # [ch_out]
-                self.vars.append(nn.Parameter(torch.zeros(param[0])))
-
-            # elif name is 'convt2d':
-            #     # [ch_in, ch_out, kernelsz, kernelsz, stride, padding]
-            #     w = nn.Parameter(torch.ones(*param[:4]))
-            #     # gain=1 according to cbfin's implementation
-            #     torch.nn.init.kaiming_normal_(w)
-            #     self.vars.append(w)
-            #     # [ch_in, ch_out]
-            #     self.vars.append(nn.Parameter(torch.zeros(param[1])))
-
-            # elif name is 'linear':
-            #     # [ch_out, ch_in]
-            #     w = nn.Parameter(torch.ones(*param))
-            #     # gain=1 according to cbfinn's implementation
-            #     torch.nn.init.kaiming_normal_(w)
-            #     self.vars.append(w)
-            #     # [ch_out]
-            #     self.vars.append(nn.Parameter(torch.zeros(param[0])))
-
-            elif name is 'bn':
-                # [ch_out]
-                w = nn.Parameter(torch.ones(param[0]))
-                self.vars.append(w)
-                # [ch_out]
-                self.vars.append(nn.Parameter(torch.zeros(param[0])))
-
-                # must set requires_grad=False
-                running_mean = nn.Parameter(torch.zeros(param[0]), requires_grad=False)
-                running_var = nn.Parameter(torch.ones(param[0]), requires_grad=False)
-                self.vars_bn.extend([running_mean, running_var])
-
-
-            elif name in ['tanh', 'relu', 'upsample', 'avg_pool1d', 'max_pool1d',
-                          'flatten', 'reshape', 'leakyrelu', 'sigmoid']:
-                continue
-            else:
-                raise NotImplementedError
-
-    def extra_repr(self):
-        info = ''
-
-        for name, param in self.config:
-            if name is 'conv2d':
-                tmp = 'conv2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)'\
-                      %(param[1], param[0], param[2], param[3], param[4], param[5],)
-                info += tmp + '\n'
-
-            elif name is 'convt2d':
-                tmp = 'convTranspose2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)'\
-                      %(param[0], param[1], param[2], param[3], param[4], param[5],)
-                info += tmp + '\n'
-
-            elif name is 'linear':
-                tmp = 'linear:(in:%d, out:%d)'%(param[1], param[0])
-                info += tmp + '\n'
-
-            elif name is 'leakyrelu':
-                tmp = 'leakyrelu:(slope:%f)'%(param[0])
-                info += tmp + '\n'
-
-
-            elif name is 'avg_pool2d':
-                tmp = 'avg_pool2d:(k:%d, stride:%d, padding:%d)'%(param[0], param[1], param[2])
-                info += tmp + '\n'
-            elif name is 'max_pool2d':
-                tmp = 'max_pool2d:(k:%d, stride:%d, padding:%d)'%(param[0], param[1], param[2])
-                info += tmp + '\n'
-            elif name in ['flatten', 'tanh', 'relu', 'upsample', 'reshape', 'sigmoid', 'use_logits', 'bn']:
-                tmp = name + ':' + str(tuple(param))
-                info += tmp + '\n'
-            else:
-                raise NotImplementedError
-
-        return info
+        self.fc = nn.Linear(300, 256)
+        self.cost = nn.CrossEntropyLoss()
 
     def forward_once(self, data):
 
@@ -303,6 +211,81 @@ class Model_TextCNN(nn.Module):
         return torch.mean((pred.view(-1) == label).type(torch.FloatTensor))
 
 
+class Model2(nn.Module):
+
+    def __init__(self, ebd, args):
+        super(Model2, self).__init__()
+
+        self.args = args
+
+        self.ebd = ebd
+
+        self.ebd_dim = self.ebd.embedding_dim
+        self.hidden_size = 128
+
+        self.rnn = RNN(300, 128, 1, True, 0)
+        self.lstm = nn.LSTM(input_size=300, hidden_size=128, num_layers=1, batch_first=True, dropout=0)
+
+        self.seq = nn.Sequential(
+            nn.Linear(500, 1),
+        )
+
+    def forward(self, data, flag=None, return_score=False):
+
+        ebd = self.ebd(data)
+        w2v = ebd
+
+        avg_sentence_ebd = torch.mean(w2v, dim=1)
+        # print("avg_sentence_ebd.shape:", avg_sentence_ebd.shape)
+
+        # scale = self.compute_score(data, ebd)
+        # print("\ndata.shape:", ebd.shape)  # [b, text_len, 300]
+
+        # Generator部分
+        ebd = self.rnn(ebd, data['text_len'])
+        # ebd, (hn, cn) = self.lstm(ebd)
+        # print("\ndata.shape:", ebd.shape)  # [b, text_len, 256]
+        # for i, b in enumerate(ebd):
+        ebd = ebd.transpose(1, 2).contiguous()  # # [b, text_len, 256] -> [b, 256, text_len]
+
+        # [b, 256, text_len] -> [b, 256, 500]
+        if ebd.shape[2] < 500:
+            zero = torch.zeros((ebd.shape[0], ebd.shape[1], 500-ebd.shape[2]))
+            if self.args.cuda != -1:
+               zero = zero.cuda(self.args.cuda)
+            ebd = torch.cat((ebd, zero), dim=-1)
+            # print('reverse_feature.shape[2]', ebd.shape[2])
+        else:
+            ebd = ebd[:, :, :500]
+            # print('reverse_feature.shape[2]', ebd.shape[2])
+
+        ebd = self.seq(ebd).squeeze(-1)  # [b, 256, 500] -> [b, 256]
+        # ebd = torch.max(ebd, dim=-1, keepdim=False)[0]
+        # print("\ndata.shape:", ebd.shape)  # [b, text_len]
+        # word_weight = F.softmax(ebd, dim=-1)
+        # print("word_weight.shape:", word_weight.shape)  # [b, text_len]
+        # sentence_ebd = torch.sum((torch.unsqueeze(word_weight, dim=-1)) * w2v, dim=-2)
+        # print("sentence_ebd.shape:", sentence_ebd.shape)
+
+        # reverse_feature = word_weight
+        #
+        # if reverse_feature.shape[1] < 500:
+        #     zero = torch.zeros((reverse_feature.shape[0], 500-reverse_feature.shape[1]))
+        #     if self.args.cuda != -1:
+        #        zero = zero.cuda(self.args.cuda)
+        #     reverse_feature = torch.cat((reverse_feature, zero), dim=-1)
+        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
+        # else:
+        #     reverse_feature = reverse_feature[:, :500]
+        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
+        #
+        # if self.args.ablation == '-IL':
+        #     sentence_ebd = torch.cat((avg_sentence_ebd, sentence_ebd), 1)
+        #     print("%%%%%%%%%%%%%%%%%%%%This is ablation mode: -IL%%%%%%%%%%%%%%%%%%")
+
+        return ebd
+
+
 #自定义ContrastiveLoss
 class ContrastiveLoss(torch.nn.Module):
     """
@@ -316,17 +299,38 @@ class ContrastiveLoss(torch.nn.Module):
 
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim = True)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+        loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
+                                      (1-label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
 
         return loss_contrastive
 
 
-def train_one(task, class_names, model, opt_TextCNN, criterion, args, grad):
+def get_embedding_M2(vocab, args):
+    print("{}, Building embedding".format(
+        datetime.datetime.now()), flush=True)
+
+    ebd = WORDEBD(vocab, args.finetune_ebd)
+
+    model2 = Model2(ebd, args)
+    # modelD = ModelD(ebd, args)
+
+    print("{}, Building embedding".format(
+        datetime.datetime.now()), flush=True)
+
+    if args.cuda != -1:
+        model2 = model2.cuda(args.cuda)
+        # modelD = modelD.cuda(args.cuda)
+        return model2  # , modelD
+    else:
+        return model2  # , modelD
+
+
+
+def train_one(task, class_names, model, optG, criterion, args, grad):
     '''
         Train the model on one sampled task.
     '''
-    model['TextCNN'].train()
+    model['G'].train()
     # model['G2'].train()
     # model['clf'].train()
 
@@ -372,30 +376,30 @@ def train_one(task, class_names, model, opt_TextCNN, criterion, args, grad):
     support['label_1'] = support['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
+            for j in range(1, len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
+            for j in range(len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-    support['text_2'] = support['text'][0].view((1, -1))
-    support['text_len_2'] = support['text_len'][0].view(-1)
-    support['label_2'] = support['label'][0].view(-1)
+    support['text_2'] = class_names_dict['text'][0].view((1, -1))
+    support['text_len_2'] = class_names_dict['text_len'][0].view(-1)
+    support['label_2'] = class_names_dict['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(1, len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)), dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)), dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
 
     # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
     # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
@@ -417,9 +421,9 @@ def train_one(task, class_names, model, opt_TextCNN, criterion, args, grad):
 
 
     '''first step'''
-    S_out1, S_out2 = model['TextCNN'](support_1, support_2)
+    S_out1, S_out2 = model['G'](support_1, support_2)
     loss = criterion(S_out1, S_out2, support['label_final'])
-    zero_grad(model['TextCNN'].parameters())
+    zero_grad(model['G'].parameters())
     grads = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True)
     fast_weights, orderd_params = model['G'].cloned_fc_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].fc.named_parameters(), grads):
@@ -541,18 +545,18 @@ def train(train_data, val_data, model, class_names, criterion, args):
     sub_cycle = 0
     best_path = None
 
-    opt_TextCNN = torch.optim.Adam(grad_param(model, ['TextCNN']), lr=args.meta_lr)
+    optG = torch.optim.Adam(grad_param(model, ['G']), lr=args.meta_lr)
     # optG2 = torch.optim.Adam(grad_param(model, ['G2']), lr=args.task_lr)
     # optCLF = torch.optim.Adam(grad_param(model, ['clf']), lr=args.task_lr)
 
     if args.lr_scheduler == 'ReduceLROnPlateau':
-        scheduler_TextCNN = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                opt_TextCNN, 'max', patience=args.patience//2, factor=0.1, verbose=True)
+        schedulerG = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optG, 'max', patience=args.patience//2, factor=0.1, verbose=True)
         # schedulerCLF = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #     optCLF, 'max', patience=args.patience // 2, factor=0.1, verbose=True)
 
     elif args.lr_scheduler == 'ExponentialLR':
-        scheduler_TextCNN = torch.optim.lr_scheduler.ExponentialLR(opt_TextCNN, gamma=args.ExponentialLR_gamma)
+        schedulerG = torch.optim.lr_scheduler.ExponentialLR(optG, gamma=args.ExponentialLR_gamma)
         # schedulerCLF = torch.optim.lr_scheduler.ExponentialLR(optCLF, gamma=args.ExponentialLR_gamma)
 
 
@@ -577,24 +581,31 @@ def train(train_data, val_data, model, class_names, criterion, args):
         # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
         # class_names_dict['is_support'] = False
 
+        # print("train_data[label]: ", train_data["label"])
+        # print("sampled_classes: ", sampled_classes)
+        # print("source_classes: ", source_classes)
+        # print("args.train_episodes: ", args.train_episodes)
+        train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
+        # print("pass1")
 
-        train_gen = ParallelSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
-
-        sampled_tasks = train_gen.get_epoch()
+        sampled_tasks = train_gen.get_epoch()  # 此处并非返回数据，而是生成函数迭代器！！！
 
         grad = {'clf': [], 'G': []}
 
         if not args.notqdm:
             sampled_tasks = tqdm(sampled_tasks, total=train_gen.num_episodes,
-                    ncols=80, leave=False, desc=colored('Training on train',
-                        'yellow'))
+                                 ncols=80, leave=False, desc=colored('Training on train',
+                                                                     'yellow'))
 
         for task in sampled_tasks:
             if task is None:
                 break
-            q_loss, q_acc = train_one(task, class_names, model, opt_TextCNN, criterion, args, grad)
+            # print("every sampled_tasks label: ", task[0]["label"])
+            # print("every sampled_tasks len: ", task[0]["text_len"])
+            q_loss, q_acc = train_one(task, class_names, model, optG, criterion, args, grad)
             acc += q_acc
             loss += q_loss
+
 
         if ep % 100 == 0:
             print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(q_acc.item()) + "-----------")
@@ -740,30 +751,30 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     support['label_1'] = support['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
+            for j in range(1, len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
+            for j in range(len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-    support['text_2'] = support['text'][0].view((1, -1))
-    support['text_len_2'] = support['text_len'][0].view(-1)
-    support['label_2'] = support['label'][0].view(-1)
+    support['text_2'] = class_names_dict['text'][0].view((1, -1))
+    support['text_len_2'] = class_names_dict['text_len'][0].view(-1)
+    support['label_2'] = class_names_dict['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(1, len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)), dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)), dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
 
     # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
     # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
@@ -823,6 +834,8 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
     acc = []
     for ep in range(num_episodes):
+        if ep % 100 == 0:
+            print(ep)
         # if args.embedding == 'mlada':
         #     acc1, d_acc1, sentence_ebd, avg_sentence_ebd, sentence_label, word_weight, query_data, x_hat = test_one(task, model, args)
         #     if count < 20:
@@ -852,7 +865,7 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
         # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
         # class_names_dict['is_support'] = False
 
-        train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
+        train_gen = SerialSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
         # class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
@@ -899,27 +912,6 @@ def main():
 
     print_args(args)
 
-    config = [
-        ('conv2d', [16, 1, 3, 3, 1, 0]),
-        ('relu', [True]),
-        ('bn', [16]),
-        ('max_pool1d', [16]),  ########
-        ('conv2d', [16, 1, 4, 4, 1, 0]),
-        ('relu', [True]),
-        ('bn', [16]),
-        ('max_pool1d', [16]),  ########
-        ('conv2d', [16, 1, 5, 5, 1, 0]),
-        ('relu', [True]),
-        ('bn', [16]),
-        ('max_pool1d', [16]),
-        # ('conv2d', [32, 32, 3, 3, 1, 0]),
-        # ('relu', [True]),
-        # ('bn', [32]),
-        # ('max_pool2d', [2, 1, 0]),
-        ('flatten', []),
-        ('linear', [args.n_way, 32 * 5 * 5])
-    ]
-
     set_seed(args.seed)
 
     # load data
@@ -929,7 +921,7 @@ def main():
 
     # initialize model
     model = {}
-    model["TextCNN"] = get_embedding(vocab, args)
+    model["G"] = get_embedding(vocab, args)  # model["G"]里面 是 词向量平均 + FC
 
     criterion = ContrastiveLoss()
     # model["G2"] = get_embedding_M2(vocab, args)
@@ -937,12 +929,12 @@ def main():
 
     if args.mode == "train":
         # train model on train_data, early stopping based on val_data
-        opt_TextCNN = train(train_data, val_data, model, class_names, criterion, args)
+        optG = train(train_data, val_data, model, class_names, criterion, args)  # 使用孪生网络，来进行maml的方法，只改变FC
 
     # val_acc, val_std, _ = test(val_data, model, args,
     #                                         args.val_episodes)
 
-    test_acc, test_std = test(test_data, class_names, optG, model, criterion, args, args.test_epochs, False)
+    test_acc, test_std = test(test_data, class_names, optG, model, criterion, args, args.test_epochs, True)
 
     # path_drawn = args.path_drawn_data
     # with open(path_drawn, 'w') as f_w:
@@ -969,413 +961,6 @@ def main():
 
         with open(args.result_path, "wb") as f:
             pickle.dump(result, f, pickle.HIGHEST_PROTOCOL)
-
-
-class Meta(nn.Module):
-    """
-    Meta Learner
-    """
-    def __init__(self, args, config):
-        """
-
-        :param args:
-        """
-        super(Meta, self).__init__()
-
-        self.task_lr = args.task_lr
-        self.meta_lr = args.meta_lr
-        self.n_way = args.ways
-        self.k_spt = args.shot
-        self.k_qry = args.query
-        self.task_num = args.task_num
-        self.train_iter = args.train_iter
-        self.test_iter = args.test_iter
-
-        self.net = Learner(config, args.imgc, args.imgsz)
-        self.meta_optim = optim.Adam(self.net.parameters(), lr=self.meta_lr)
-
-    def clip_grad_by_norm_(self, grad, max_norm):
-        """
-        in-place gradient clipping.
-        :param grad: list of gradients
-        :param max_norm: maximum norm allowable
-        :return:
-        """
-
-        total_norm = 0
-        counter = 0
-        for g in grad:
-            param_norm = g.data.norm(2)
-            total_norm += param_norm.item() ** 2
-            counter += 1
-        total_norm = total_norm ** (1. / 2)
-
-        clip_coef = max_norm / (total_norm + 1e-6)
-        if clip_coef < 1:
-            for g in grad:
-                g.data.mul_(clip_coef)
-
-        return total_norm/counter
-
-    def forward(self, x_spt, y_spt, x_qry, y_qry):
-        """
-
-        :param x_spt:   [b, setsz, c_, h, w]
-        :param y_spt:   [b, setsz]
-        :param x_qry:   [b, querysz, c_, h, w]
-        :param y_qry:   [b, querysz]
-        :return:
-        """
-        task_num, setsz, c_, h, w = x_spt.size()
-        querysz = x_qry.size(1)
-
-        losses_q = [0 for _ in range(self.update_step + 1)]  # losses_q[i] is the loss on step i
-        corrects = [0 for _ in range(self.update_step + 1)]
-
-
-        for i in range(task_num):
-
-            # 1. run the i-th task and compute loss for k=0
-            logits = self.net(x_spt[i], vars=None, bn_training=True)
-            loss = F.cross_entropy(logits, y_spt[i])
-            grad = torch.autograd.grad(loss, self.net.parameters())
-            # 就是把梯度减掉
-            fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, self.net.parameters())))
-
-            # this is the loss and accuracy before first update
-            with torch.no_grad():
-                # [setsz, nway]
-                logits_q = self.net(x_qry[i], self.net.parameters(), bn_training=True)
-                loss_q = F.cross_entropy(logits_q, y_qry[i])
-                losses_q[0] += loss_q
-
-                pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, y_qry[i]).sum().item()
-                corrects[0] = corrects[0] + correct
-
-            # this is the loss and accuracy after the first update
-            with torch.no_grad():
-                # [setsz, nway]
-                logits_q = self.net(x_qry[i], fast_weights, bn_training=True)
-                loss_q = F.cross_entropy(logits_q, y_qry[i])
-                losses_q[1] += loss_q
-                # [setsz]
-                pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, y_qry[i]).sum().item()
-                corrects[1] = corrects[1] + correct
-
-            for k in range(1, self.update_step):
-                # 1. run the i-th task and compute loss for k=1~K-1
-                logits = self.net(x_spt[i], fast_weights, bn_training=True)
-                loss = F.cross_entropy(logits, y_spt[i])
-                # 2. compute grad on theta_pi
-                grad = torch.autograd.grad(loss, fast_weights)
-                # 3. theta_pi = theta_pi - train_lr * grad
-                fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, fast_weights)))
-
-                logits_q = self.net(x_qry[i], fast_weights, bn_training=True)
-                # loss_q will be overwritten and just keep the loss_q on last update step.
-                loss_q = F.cross_entropy(logits_q, y_qry[i])
-                losses_q[k + 1] += loss_q
-
-                with torch.no_grad():
-                    pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                    correct = torch.eq(pred_q, y_qry[i]).sum().item()  # convert to numpy
-                    corrects[k + 1] = corrects[k + 1] + correct
-
-
-
-        # end of all tasks
-        # sum over all losses on query set across all tasks
-        loss_q = losses_q[-1] / task_num
-
-        # optimize theta parameters
-        self.meta_optim.zero_grad()
-        loss_q.backward()
-        # print('meta update')
-        # for p in self.net.parameters()[:5]:
-        # 	print(torch.norm(p).item())
-        self.meta_optim.step()
-
-
-        accs = np.array(corrects) / (querysz * task_num)
-
-        return accs
-
-
-    def finetunning(self, x_spt, y_spt, x_qry, y_qry):
-        """
-
-        :param x_spt:   [setsz, c_, h, w]
-        :param y_spt:   [setsz]
-        :param x_qry:   [querysz, c_, h, w]
-        :param y_qry:   [querysz]
-        :return:
-        """
-        assert len(x_spt.shape) == 4
-
-        querysz = x_qry.size(0)
-
-        corrects = [0 for _ in range(self.update_step_test + 1)]
-
-        # in order to not ruin the state of running_mean/variance and bn_weight/bias
-        # we finetunning on the copied model instead of self.net
-        net = deepcopy(self.net)
-
-        # 1. run the i-th task and compute loss for k=0
-        logits = net(x_spt)
-        loss = F.cross_entropy(logits, y_spt)
-        grad = torch.autograd.grad(loss, net.parameters())
-        fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, net.parameters())))
-
-        # this is the loss and accuracy before first update
-        with torch.no_grad():
-            # [setsz, nway]
-            logits_q = net(x_qry, net.parameters(), bn_training=True)
-            # [setsz]
-            pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-            # scalar
-            correct = torch.eq(pred_q, y_qry).sum().item()
-            corrects[0] = corrects[0] + correct
-
-        # this is the loss and accuracy after the first update
-        with torch.no_grad():
-            # [setsz, nway]
-            logits_q = net(x_qry, fast_weights, bn_training=True)
-            # [setsz]
-            pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-            # scalar
-            correct = torch.eq(pred_q, y_qry).sum().item()
-            corrects[1] = corrects[1] + correct
-
-        for k in range(1, self.update_step_test):
-            # 1. run the i-th task and compute loss for k=1~K-1
-            logits = net(x_spt, fast_weights, bn_training=True)
-            loss = F.cross_entropy(logits, y_spt)
-            # 2. compute grad on theta_pi
-            grad = torch.autograd.grad(loss, fast_weights)
-            # 3. theta_pi = theta_pi - train_lr * grad
-            fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, fast_weights)))
-
-            logits_q = net(x_qry, fast_weights, bn_training=True)
-            # loss_q will be overwritten and just keep the loss_q on last update step.
-            loss_q = F.cross_entropy(logits_q, y_qry)
-
-            with torch.no_grad():
-                pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
-                correct = torch.eq(pred_q, y_qry).sum().item()  # convert to numpy
-                corrects[k + 1] = corrects[k + 1] + correct
-
-
-        del net
-
-        accs = np.array(corrects) / querysz
-
-        return accs
-
-
-class Learner(nn.Module):
-    """
-
-    """
-
-    def __init__(self, config, imgc, imgsz):
-        """
-
-        :param config: network config file, type:list of (string, list)
-        :param imgc: 1 or 3
-        :param imgsz:  28 or 84
-        """
-        super(Learner, self).__init__()
-
-        self.config = config
-
-        # this dict contains all tensors needed to be optimized
-        self.vars = nn.ParameterList()
-        # running_mean and running_var
-        self.vars_bn = nn.ParameterList()
-
-        for i, (name, param) in enumerate(self.config):
-            if name is 'conv2d':
-                # [ch_out, ch_in, kernelsz, kernelsz]
-                w = nn.Parameter(torch.ones(*param[:4]))
-                # gain=1 according to cbfin's implementation
-                torch.nn.init.kaiming_normal_(w)
-                self.vars.append(w)
-                # [ch_out]
-                self.vars.append(nn.Parameter(torch.zeros(param[0])))
-
-            # elif name is 'convt2d':
-            #     # [ch_in, ch_out, kernelsz, kernelsz, stride, padding]
-            #     w = nn.Parameter(torch.ones(*param[:4]))
-            #     # gain=1 according to cbfin's implementation
-            #     torch.nn.init.kaiming_normal_(w)
-            #     self.vars.append(w)
-            #     # [ch_in, ch_out]
-            #     self.vars.append(nn.Parameter(torch.zeros(param[1])))
-
-            # elif name is 'linear':
-            #     # [ch_out, ch_in]
-            #     w = nn.Parameter(torch.ones(*param))
-            #     # gain=1 according to cbfinn's implementation
-            #     torch.nn.init.kaiming_normal_(w)
-            #     self.vars.append(w)
-            #     # [ch_out]
-            #     self.vars.append(nn.Parameter(torch.zeros(param[0])))
-
-            elif name is 'bn':
-                # [ch_out]
-                w = nn.Parameter(torch.ones(param[0]))
-                self.vars.append(w)
-                # [ch_out]
-                self.vars.append(nn.Parameter(torch.zeros(param[0])))
-
-                # must set requires_grad=False
-                running_mean = nn.Parameter(torch.zeros(param[0]), requires_grad=False)
-                running_var = nn.Parameter(torch.ones(param[0]), requires_grad=False)
-                self.vars_bn.extend([running_mean, running_var])
-
-
-            elif name in ['tanh', 'relu', 'upsample', 'avg_pool2d', 'max_pool1d',
-                          'flatten', 'reshape', 'leakyrelu', 'sigmoid']:
-                continue
-            else:
-                raise NotImplementedError
-
-    def extra_repr(self):
-        info = ''
-
-        for name, param in self.config:
-            if name is 'conv2d':
-                tmp = 'conv2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)'\
-                      %(param[1], param[0], param[2], param[3], param[4], param[5],)
-                info += tmp + '\n'
-
-            elif name is 'convt2d':
-                tmp = 'convTranspose2d:(ch_in:%d, ch_out:%d, k:%dx%d, stride:%d, padding:%d)'\
-                      %(param[0], param[1], param[2], param[3], param[4], param[5],)
-                info += tmp + '\n'
-
-            elif name is 'linear':
-                tmp = 'linear:(in:%d, out:%d)'%(param[1], param[0])
-                info += tmp + '\n'
-
-            elif name is 'leakyrelu':
-                tmp = 'leakyrelu:(slope:%f)'%(param[0])
-                info += tmp + '\n'
-
-
-            elif name is 'avg_pool2d':
-                tmp = 'avg_pool2d:(k:%d, stride:%d, padding:%d)'%(param[0], param[1], param[2])
-                info += tmp + '\n'
-            elif name is 'max_pool2d':
-                tmp = 'max_pool2d:(k:%d, stride:%d, padding:%d)'%(param[0], param[1], param[2])
-                info += tmp + '\n'
-            elif name in ['flatten', 'tanh', 'relu', 'upsample', 'reshape', 'sigmoid', 'use_logits', 'bn']:
-                tmp = name + ':' + str(tuple(param))
-                info += tmp + '\n'
-            else:
-                raise NotImplementedError
-
-        return info
-
-    def forward(self, x, vars=None, bn_training=True):
-        """
-        This function can be called by finetunning, however, in finetunning, we dont wish to update
-        running_mean/running_var. Thought weights/bias of bn is updated, it has been separated by fast_weights.
-        Indeed, to not update running_mean/running_var, we need set update_bn_statistics=False
-        but weight/bias will be updated and not dirty initial theta parameters via fast_weiths.
-        :param x: [b, 1, 28, 28]
-        :param vars:
-        :param bn_training: set False to not update
-        :return: x, loss, likelihood, kld
-        """
-
-        if vars is None:
-            vars = self.vars
-
-        idx = 0
-        bn_idx = 0
-
-        for name, param in self.config:
-            if name is 'conv2d':
-                w, b = vars[idx], vars[idx + 1]
-                # remember to keep synchrozied of forward_encoder and forward_decoder!
-                x = F.conv2d(x, w, b, stride=param[4], padding=param[5])
-                idx += 2
-                # print(name, param, '\tout:', x.shape)
-            # elif name is 'convt2d':
-            #     w, b = vars[idx], vars[idx + 1]
-            #     # remember to keep synchrozied of forward_encoder and forward_decoder!
-            #     x = F.conv_transpose2d(x, w, b, stride=param[4], padding=param[5])
-            #     idx += 2
-            #     # print(name, param, '\tout:', x.shape)
-            # elif name is 'linear':
-            #     w, b = vars[idx], vars[idx + 1]
-            #     x = F.linear(x, w, b)
-            #     idx += 2
-            #     # print('forward:', idx, x.norm().item())
-            elif name is 'bn':
-                w, b = vars[idx], vars[idx + 1]
-                running_mean, running_var = self.vars_bn[bn_idx], self.vars_bn[bn_idx+1]
-                x = F.batch_norm(x, running_mean, running_var, weight=w, bias=b, training=bn_training)
-                idx += 2
-                bn_idx += 2
-
-            elif name is 'flatten':
-                # print(x.shape)
-                x = x.view(x.size(0), -1)
-            elif name is 'reshape':
-                # [b, 8] => [b, 2, 2, 2]
-                x = x.view(x.size(0), *param)
-            elif name is 'relu':
-                x = F.relu(x, inplace=param[0])
-            elif name is 'leakyrelu':
-                x = F.leaky_relu(x, negative_slope=param[0], inplace=param[1])
-            elif name is 'tanh':
-                x = F.tanh(x)
-            elif name is 'sigmoid':
-                x = torch.sigmoid(x)
-            elif name is 'upsample':
-                x = F.upsample_nearest(x, scale_factor=param[0])
-            elif name is 'max_pool1d':
-                x = F.max_pool1d(x, param[0])
-            elif name is 'avg_pool2d':
-                x = F.avg_pool2d(x, param[0], param[1], param[2])
-
-            else:
-                raise NotImplementedError
-
-        # make sure variable is used properly
-        assert idx == len(vars)
-        assert bn_idx == len(self.vars_bn)
-
-
-        return x
-
-
-    def zero_grad(self, vars=None):
-        """
-
-        :param vars:
-        :return:
-        """
-        with torch.no_grad():
-            if vars is None:
-                for p in self.vars:
-                    if p.grad is not None:
-                        p.grad.zero_()
-            else:
-                for p in vars:
-                    if p.grad is not None:
-                        p.grad.zero_()
-
-    def parameters(self):
-        """
-        override this function since initial parameters will return with a generator.
-        :return:
-        """
-        return self.vars
 
 
 if __name__ == '__main__':
