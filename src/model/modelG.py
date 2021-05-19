@@ -21,6 +21,7 @@ class ModelG(nn.Module):
         self.lstm = nn.LSTM(input_size=300, hidden_size=128, num_layers=1, batch_first=True, dropout=0)
 
         self.seq = nn.Sequential(
+            nn.Dropout(0.6),
             nn.Linear(500, 1),
         )
 

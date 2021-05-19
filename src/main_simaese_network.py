@@ -15,7 +15,7 @@ import torch.nn as nn
 from embedding.rnn import RNN
 import torch.nn.functional as F
 from train.utils import grad_param, get_norm
-from dataset.sampler import ParallelSampler, task_sampler
+from dataset.sampler import ParallelSampler, ParallelSampler_Test, task_sampler
 from dataset import utils
 from tools.tool import neg_dist, reidx_y
 from tqdm import tqdm
@@ -68,123 +68,76 @@ class ModelG(nn.Module):
         # self.seq = nn.Sequential(
         #     nn.Linear(500, 1),
         # )
+        # Text CNN
+        ci = 1  # input chanel size
+        kernel_num = args.kernel_num  # output chanel size
+        kernel_size = args.kernel_size
+        dropout = args.dropout
+        self.conv11 = nn.Conv2d(ci, kernel_num, (kernel_size[0], self.ebd_dim))
+        self.conv12 = nn.Conv2d(ci, kernel_num, (kernel_size[1], self.ebd_dim))
+        self.conv13 = nn.Conv2d(ci, kernel_num, (kernel_size[2], self.ebd_dim))
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(len(kernel_size) * kernel_num, 64)
 
-        self.fc = nn.Linear(300, 256)
         self.cost = nn.CrossEntropyLoss()
 
     def forward_once(self, data):
 
-        ebd = self.ebd(data)
-        w2v = ebd
+        ebd = self.ebd(data)  # [b, text_len, 300]
+        ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
-        avg_sentence_ebd = torch.mean(w2v, dim=1)
-        # print("avg_sentence_ebd.shape:", avg_sentence_ebd.shape)
-        avg_sentence_ebd = self.fc(avg_sentence_ebd)
-        # print("avg_sentence_ebd_fc.shape:", avg_sentence_ebd.shape)
-        #
-        # # scale = self.compute_score(data, ebd)
-        # # print("\ndata.shape:", ebd.shape)  # [b, text_len, 300]
-        #
-        # # Generator部分
-        # ebd = self.rnn(ebd, data['text_len'])
-        # # ebd, (hn, cn) = self.lstm(ebd)
-        # # print("\ndata.shape:", ebd.shape)  # [b, text_len, 256]
-        # # for i, b in enumerate(ebd):
-        # ebd = ebd.transpose(1, 2).contiguous()  # # [b, text_len, 256] -> [b, 256, text_len]
-        #
-        # # [b, 256, text_len] -> [b, 256, 500]
-        # if ebd.shape[2] < 500:
-        #     zero = torch.zeros((ebd.shape[0], ebd.shape[1], 500-ebd.shape[2]))
-        #     if self.args.cuda != -1:
-        #        zero = zero.cuda(self.args.cuda)
-        #     ebd = torch.cat((ebd, zero), dim=-1)
-        #     # print('reverse_feature.shape[2]', ebd.shape[2])
-        # else:
-        #     ebd = ebd[:, :, :500]
-        #     # print('reverse_feature.shape[2]', ebd.shape[2])
-        #
-        # ebd = self.seq(ebd).squeeze(-1)  # [b, 256, 500] -> [b, 256]
-        # ebd = torch.max(ebd, dim=-1, keepdim=False)[0]
-        # print("\ndata.shape:", ebd.shape)  # [b, text_len]
-        # word_weight = F.softmax(ebd, dim=-1)
-        # print("word_weight.shape:", word_weight.shape)  # [b, text_len]
-        # sentence_ebd = torch.sum((torch.unsqueeze(word_weight, dim=-1)) * w2v, dim=-2)
-        # print("sentence_ebd.shape:", sentence_ebd.shape)
+        x1 = self.conv11(ebd)  # [b, kernel_num, H_out, 1]
+        # print("conv11", x1.shape)
+        x1 = F.relu(x1.squeeze(3))  # [b, kernel_num, H_out]
+        x1 = F.max_pool1d(x1, x1.size(2)).squeeze(2)  # [batch, kernel_num]
 
-        # reverse_feature = word_weight
-        #
-        # if reverse_feature.shape[1] < 500:
-        #     zero = torch.zeros((reverse_feature.shape[0], 500-reverse_feature.shape[1]))
-        #     if self.args.cuda != -1:
-        #        zero = zero.cuda(self.args.cuda)
-        #     reverse_feature = torch.cat((reverse_feature, zero), dim=-1)
-        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
-        # else:
-        #     reverse_feature = reverse_feature[:, :500]
-        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
-        #
-        # if self.args.ablation == '-IL':
-        #     sentence_ebd = torch.cat((avg_sentence_ebd, sentence_ebd), 1)
-        #     print("%%%%%%%%%%%%%%%%%%%%This is ablation mode: -IL%%%%%%%%%%%%%%%%%%")
+        x2 = self.conv12(ebd)  # [b, kernel_num, H_out, 1]
+        # print("conv11", x2.shape)
+        x2 = F.relu(x2.squeeze(3))  # [b, kernel_num, H_out]
+        x2 = F.max_pool1d(x2, x2.size(2)).squeeze(2)  # [batch, kernel_num]
 
-        return avg_sentence_ebd
+        x3 = self.conv13(ebd)  # [b, kernel_num, H_out, 1]
+        # print("conv11", x3.shape)
+        x3 = F.relu(x3.squeeze(3))  # [b, kernel_num, H_out]
+        x3 = F.max_pool1d(x3, x3.size(2)).squeeze(2)  # [b, kernel_num]
+
+        x = torch.cat((x1, x2, x3), 1)  # [b, 3 * kernel_num]
+        x = self.dropout(x)
+
+        x = self.fc(x)  # [b, 128]
+
+        return x
 
     def forward_once_with_param(self, data, param):
 
-        ebd = self.ebd(data)
-        w2v = ebd
+        ebd = self.ebd(data)  # [b, text_len, 300]
+        ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
-        avg_sentence_ebd = torch.mean(w2v, dim=1)
-        # print("avg_sentence_ebd.shape:", avg_sentence_ebd.shape)
-        avg_sentence_ebd = F.linear(avg_sentence_ebd, param['weight'])
-        # print("avg_sentence_ebd_fc.shape:", avg_sentence_ebd.shape)
-        #
-        # # scale = self.compute_score(data, ebd)
-        # # print("\ndata.shape:", ebd.shape)  # [b, text_len, 300]
-        #
-        # # Generator部分
-        # ebd = self.rnn(ebd, data['text_len'])
-        # # ebd, (hn, cn) = self.lstm(ebd)
-        # # print("\ndata.shape:", ebd.shape)  # [b, text_len, 256]
-        # # for i, b in enumerate(ebd):
-        # ebd = ebd.transpose(1, 2).contiguous()  # # [b, text_len, 256] -> [b, 256, text_len]
-        #
-        # # [b, 256, text_len] -> [b, 256, 500]
-        # if ebd.shape[2] < 500:
-        #     zero = torch.zeros((ebd.shape[0], ebd.shape[1], 500-ebd.shape[2]))
-        #     if self.args.cuda != -1:
-        #        zero = zero.cuda(self.args.cuda)
-        #     ebd = torch.cat((ebd, zero), dim=-1)
-        #     # print('reverse_feature.shape[2]', ebd.shape[2])
-        # else:
-        #     ebd = ebd[:, :, :500]
-        #     # print('reverse_feature.shape[2]', ebd.shape[2])
-        #
-        # ebd = self.seq(ebd).squeeze(-1)  # [b, 256, 500] -> [b, 256]
-        # ebd = torch.max(ebd, dim=-1, keepdim=False)[0]
-        # print("\ndata.shape:", ebd.shape)  # [b, text_len]
-        # word_weight = F.softmax(ebd, dim=-1)
-        # print("word_weight.shape:", word_weight.shape)  # [b, text_len]
-        # sentence_ebd = torch.sum((torch.unsqueeze(word_weight, dim=-1)) * w2v, dim=-2)
-        # print("sentence_ebd.shape:", sentence_ebd.shape)
+        w1, b1 = param['conv11']['weight'], param['conv11']['bias']
+        x1 = F.conv2d(ebd, w1, b1)  # [b, kernel_num, H_out, 1]
+        # print("conv11", x1.shape)
+        x1 = F.relu(x1.squeeze(3))  # [b, kernel_num, H_out]
+        x1 = F.max_pool1d(x1, x1.size(2)).squeeze(2)  # [batch, kernel_num]
 
-        # reverse_feature = word_weight
-        #
-        # if reverse_feature.shape[1] < 500:
-        #     zero = torch.zeros((reverse_feature.shape[0], 500-reverse_feature.shape[1]))
-        #     if self.args.cuda != -1:
-        #        zero = zero.cuda(self.args.cuda)
-        #     reverse_feature = torch.cat((reverse_feature, zero), dim=-1)
-        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
-        # else:
-        #     reverse_feature = reverse_feature[:, :500]
-        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
-        #
-        # if self.args.ablation == '-IL':
-        #     sentence_ebd = torch.cat((avg_sentence_ebd, sentence_ebd), 1)
-        #     print("%%%%%%%%%%%%%%%%%%%%This is ablation mode: -IL%%%%%%%%%%%%%%%%%%")
+        w2, b2 = param['conv12']['weight'], param['conv12']['bias']
+        x2 = F.conv2d(ebd, w2, b2)  # [b, kernel_num, H_out, 1]
+        # print("conv11", x2.shape)
+        x2 = F.relu(x2.squeeze(3))  # [b, kernel_num, H_out]
+        x2 = F.max_pool1d(x2, x2.size(2)).squeeze(2)  # [batch, kernel_num]
 
-        return avg_sentence_ebd
+        w3, b3 = param['conv13']['weight'], param['conv13']['bias']
+        x3 = F.conv2d(ebd, w3, b3)  # [b, kernel_num, H_out, 1]
+        # print("conv11", x3.shape)
+        x3 = F.relu(x3.squeeze(3))  # [b, kernel_num, H_out]
+        x3 = F.max_pool1d(x3, x3.size(2)).squeeze(2)  # [b, kernel_num]
+
+        x = torch.cat((x1, x2, x3), 1)  # [b, 3 * kernel_num]
+        x = self.dropout(x)
+
+        w_fc, b_fc = param['fc']['weight'], param['fc']['bias']
+        x = F.linear(x, w_fc, b_fc)  # [b, 128]
+
+        return x
 
     def forward(self, inputs_1, inputs_2, param=None):
         if param is None:
@@ -198,8 +151,17 @@ class ModelG(nn.Module):
     def cloned_fc_dict(self):
         return {key: val.clone() for key, val in self.fc.state_dict().items()}
 
+    def cloned_conv11_dict(self):
+        return {key: val.clone() for key, val in self.conv11.state_dict().items()}
+
+    def cloned_conv12_dict(self):
+        return {key: val.clone() for key, val in self.conv12.state_dict().items()}
+
+    def cloned_conv13_dict(self):
+        return {key: val.clone() for key, val in self.conv13.state_dict().items()}
+
     def loss(self, logits, label):
-        loss_ce = self.cost(-logits/torch.mean(logits, dim=0), label)
+        loss_ce = self.cost(-logits / torch.mean(logits, dim=1, keepdim=True), label)
         return loss_ce
 
     def accuracy(self, pred, label):
@@ -211,118 +173,29 @@ class ModelG(nn.Module):
         return torch.mean((pred.view(-1) == label).type(torch.FloatTensor))
 
 
-class Model2(nn.Module):
-
-    def __init__(self, ebd, args):
-        super(Model2, self).__init__()
-
-        self.args = args
-
-        self.ebd = ebd
-
-        self.ebd_dim = self.ebd.embedding_dim
-        self.hidden_size = 128
-
-        self.rnn = RNN(300, 128, 1, True, 0)
-        self.lstm = nn.LSTM(input_size=300, hidden_size=128, num_layers=1, batch_first=True, dropout=0)
-
-        self.seq = nn.Sequential(
-            nn.Linear(500, 1),
-        )
-
-    def forward(self, data, flag=None, return_score=False):
-
-        ebd = self.ebd(data)
-        w2v = ebd
-
-        avg_sentence_ebd = torch.mean(w2v, dim=1)
-        # print("avg_sentence_ebd.shape:", avg_sentence_ebd.shape)
-
-        # scale = self.compute_score(data, ebd)
-        # print("\ndata.shape:", ebd.shape)  # [b, text_len, 300]
-
-        # Generator部分
-        ebd = self.rnn(ebd, data['text_len'])
-        # ebd, (hn, cn) = self.lstm(ebd)
-        # print("\ndata.shape:", ebd.shape)  # [b, text_len, 256]
-        # for i, b in enumerate(ebd):
-        ebd = ebd.transpose(1, 2).contiguous()  # # [b, text_len, 256] -> [b, 256, text_len]
-
-        # [b, 256, text_len] -> [b, 256, 500]
-        if ebd.shape[2] < 500:
-            zero = torch.zeros((ebd.shape[0], ebd.shape[1], 500-ebd.shape[2]))
-            if self.args.cuda != -1:
-               zero = zero.cuda(self.args.cuda)
-            ebd = torch.cat((ebd, zero), dim=-1)
-            # print('reverse_feature.shape[2]', ebd.shape[2])
-        else:
-            ebd = ebd[:, :, :500]
-            # print('reverse_feature.shape[2]', ebd.shape[2])
-
-        ebd = self.seq(ebd).squeeze(-1)  # [b, 256, 500] -> [b, 256]
-        # ebd = torch.max(ebd, dim=-1, keepdim=False)[0]
-        # print("\ndata.shape:", ebd.shape)  # [b, text_len]
-        # word_weight = F.softmax(ebd, dim=-1)
-        # print("word_weight.shape:", word_weight.shape)  # [b, text_len]
-        # sentence_ebd = torch.sum((torch.unsqueeze(word_weight, dim=-1)) * w2v, dim=-2)
-        # print("sentence_ebd.shape:", sentence_ebd.shape)
-
-        # reverse_feature = word_weight
-        #
-        # if reverse_feature.shape[1] < 500:
-        #     zero = torch.zeros((reverse_feature.shape[0], 500-reverse_feature.shape[1]))
-        #     if self.args.cuda != -1:
-        #        zero = zero.cuda(self.args.cuda)
-        #     reverse_feature = torch.cat((reverse_feature, zero), dim=-1)
-        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
-        # else:
-        #     reverse_feature = reverse_feature[:, :500]
-        #     print('reverse_feature.shape[1]', reverse_feature.shape[1])
-        #
-        # if self.args.ablation == '-IL':
-        #     sentence_ebd = torch.cat((avg_sentence_ebd, sentence_ebd), 1)
-        #     print("%%%%%%%%%%%%%%%%%%%%This is ablation mode: -IL%%%%%%%%%%%%%%%%%%")
-
-        return ebd
-
-
-#自定义ContrastiveLoss
+# 自定义ContrastiveLoss
 class ContrastiveLoss(torch.nn.Module):
     """
     Contrastive loss function.
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     """
 
-    def __init__(self, margin=2.0):
+    def __init__(self, margin=2):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
     def forward(self, output1, output2, label):
-        euclidean_distance = F.pairwise_distance(output1, output2, keepdim = True)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+        euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
+        # print("**********************************************************************")
+        # print("euclidean_distance:", euclidean_distance.shape, torch.mean(euclidean_distance, dim=0))
+        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
+        # print("euclidean_distance_after_mean:", euclidean_distance)
+        loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
+                                      (1 - label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0),
+                                                              2))
 
+        # print("**********************************************************************")
         return loss_contrastive
-
-
-def get_embedding_M2(vocab, args):
-    print("{}, Building embedding".format(
-        datetime.datetime.now()), flush=True)
-
-    ebd = WORDEBD(vocab, args.finetune_ebd)
-
-    model2 = Model2(ebd, args)
-    # modelD = ModelD(ebd, args)
-
-    print("{}, Building embedding".format(
-        datetime.datetime.now()), flush=True)
-
-    if args.cuda != -1:
-        model2 = model2.cuda(args.cuda)
-        # modelD = modelD.cuda(args.cuda)
-        return model2  # , modelD
-    else:
-        return model2  # , modelD
 
 
 def train_one(task, class_names, model, optG, criterion, args, grad):
@@ -359,7 +232,9 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
 
     """维度填充"""
     if support['text'].shape[1] != class_names_dict['text'].shape[1]:
-        zero = torch.zeros((class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]), dtype=torch.long)
+        zero = torch.zeros(
+            (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
+            dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
@@ -418,111 +293,82 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     # print("2222222", support['label_2'])
     # print(support['label_final'])
 
-
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     loss = criterion(S_out1, S_out2, support['label_final'])
+    # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
-    grads = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True)
-    fast_weights, orderd_params = model['G'].cloned_fc_dict(), OrderedDict()
-    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads):
-        fast_weights[key] = orderd_params[key] = val-args.task_lr*grad
+
+    grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_fc, orderd_params_fc = model['G'].cloned_fc_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads_fc):
+        fast_weights_fc[key] = orderd_params_fc[key] = val - args.task_lr * grad
+
+    grads_conv11 = autograd.grad(loss, model['G'].conv11.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv11, orderd_params_conv11 = model['G'].cloned_conv11_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv11.named_parameters(), grads_conv11):
+        fast_weights_conv11[key] = orderd_params_conv11[key] = val - args.task_lr * grad
+
+    grads_conv12 = autograd.grad(loss, model['G'].conv12.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv12, orderd_params_conv12 = model['G'].cloned_conv12_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv12.named_parameters(), grads_conv12):
+        fast_weights_conv12[key] = orderd_params_conv12[key] = val - args.task_lr * grad
+
+    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True)
+    fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
+        fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
+
+    fast_weights = {}
+    fast_weights['fc'] = fast_weights_fc
+    fast_weights['conv11'] = fast_weights_conv11
+    fast_weights['conv12'] = fast_weights_conv12
+    fast_weights['conv13'] = fast_weights_conv13
+
     '''steps remaining'''
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         loss = criterion(S_out1, S_out2, support['label_final'])
-        zero_grad(orderd_params.values())
-        grads = torch.autograd.grad(loss, orderd_params.values(), allow_unused=True)
+        # print("train_iter: {} s_loss:{}".format(k, loss))
+        zero_grad(orderd_params_fc.values())
+        zero_grad(orderd_params_conv11.values())
+        zero_grad(orderd_params_conv12.values())
+        zero_grad(orderd_params_conv13.values())
+        grads_fc = torch.autograd.grad(loss, orderd_params_fc.values(), allow_unused=True, retain_graph=True)
+        grads_conv11 = torch.autograd.grad(loss, orderd_params_conv11.values(), allow_unused=True, retain_graph=True)
+        grads_conv12 = torch.autograd.grad(loss, orderd_params_conv12.values(), allow_unused=True, retain_graph=True)
+        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True)
         # print('grads:', grads)
         # print("orderd_params.items():", orderd_params.items())
-        for (key, val), grad in zip(orderd_params.items(), grads):
+        for (key, val), grad in zip(orderd_params_fc.items(), grads_fc):
             if grad is not None:
-                fast_weights[key] = orderd_params[key] = val - args.task_lr * grad
+                fast_weights['fc'][key] = orderd_params_fc[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv11.items(), grads_conv11):
+            if grad is not None:
+                fast_weights['conv11'][key] = orderd_params_conv11[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv12.items(), grads_conv12):
+            if grad is not None:
+                fast_weights['conv12'][key] = orderd_params_conv12[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv13.items(), grads_conv13):
+            if grad is not None:
+                fast_weights['conv13'][key] = orderd_params_conv13[key] = val - args.task_lr * grad
 
     """计算Q上的损失"""
     CN = model['G'].forward_once_with_param(class_names_dict, fast_weights)
     XQ = model['G'].forward_once_with_param(query, fast_weights)
     logits_q = neg_dist(XQ, CN)
+    # print("logits_q:", logits_q)
     q_loss = model['G'].loss(logits_q, YQ)
+    # print("q_loss:", q_loss)
     _, pred = torch.max(logits_q, 1)
     acc_q = model['G'].accuracy(pred, YQ)
 
     optG.zero_grad()
     q_loss.backward()
     optG.step()
-
-    # '把CN过微调过的G， S和Q过G2'
-    # CN = model['G'](class_names_dict)  # CN:[N, 256(hidden_size*2)]
-    # # Embedding the document
-    # XS = model['G2'](support)  # XS:[N*K, 256(hidden_size*2)]
-    # # print("XS:", XS.shape)
-    # YS = support['label']
-    # # print('YS:', YS)
-    #
-    # XQ = model['G2'](query)
-    # YQ = query['label']
-    # # print('YQ:', YQ)
-    #
-    # YS, YQ = reidx_y(args, YS, YQ)  # 映射标签为从0开始
-    #
-    # '第二步：用Support更新MLP'
-    # for _ in range(args.train_iter):
-    #
-    #     # Embedding the document
-    #     XS_mlp = model['clf'](XS)  # [N*K, 256(hidden_size*2)] -> [N*K, 256]
-    #
-    #     neg_d = neg_dist(XS_mlp, CN)  # [N*K, N]
-    #     # print("neg_d:", neg_d.shape)
-    #
-    #     mlp_loss = model['clf'].loss(neg_d, YS)
-    #     # print("mlp_loss:", mlp_loss)
-    #
-    #     optCLF.zero_grad()
-    #     mlp_loss.backward(retain_graph=True)
-    #     optCLF.step()
-    #
-    # '第三步：用Q更新G2'
-    # XQ_mlp = model['clf'](XQ)
-    # neg_d = neg_dist(XQ_mlp, CN)
-    # q_loss = model['clf'].loss(neg_d, YQ)
-
-    # optG2.zero_grad()
-    # q_loss.backward()
-    # optG2.step()
-    #
-    # _, pred = torch.max(neg_d, 1)
-    # acc_q = model['clf'].accuracy(pred, YQ)
-
-        # YQ_d = torch.ones(query['label'].shape, dtype=torch.long).to(query['label'].device)
-        # print('YQ', set(YQ.numpy()))
-
-        # XSource, XSource_inputD, _ = model['G'](source)
-        # YSource_d = torch.zeros(source['label'].shape, dtype=torch.long).to(source['label'].device)
-
-        # XQ_logitsD = model['D'](XQ_inputD)
-        # XSource_logitsD = model['D'](XSource_inputD)
-        #
-        # d_loss = F.cross_entropy(XQ_logitsD, YQ_d) + F.cross_entropy(XSource_logitsD, YSource_d)
-        # d_loss.backward(retain_graph=True)
-        # grad['D'].append(get_norm(model['D']))
-        # optD.step()
-        #
-        # # *****************update G****************
-        # optG.zero_grad()
-        # XQ_logitsD = model['D'](XQ_inputD)
-        # XSource_logitsD = model['D'](XSource_inputD)
-        # d_loss = F.cross_entropy(XQ_logitsD, YQ_d) + F.cross_entropy(XSource_logitsD, YSource_d)
-        #
-        # acc, d_acc, loss, _ = model['clf'](XS, YS, XQ, YQ, XQ_logitsD, XSource_logitsD, YQ_d, YSource_d)
-        #
-        # g_loss = loss - d_loss
-        # if args.ablation == "-DAN":
-        #     g_loss = loss
-        #     print("%%%%%%%%%%%%%%%%%%%This is ablation mode: -DAN%%%%%%%%%%%%%%%%%%%%%%%%%%")
-        # g_loss.backward(retain_graph=True)
-        # grad['G'].append(get_norm(model['G']))
-        # grad['clf'].append(get_norm(model['clf']))
-        # optG.step()
 
     return q_loss, acc_q
 
@@ -534,9 +380,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
     '''
     # creating a tmp directory to save the models
     out_dir = os.path.abspath(os.path.join(
-                                  os.path.curdir,
-                                  "tmp-runs",
-                                  str(int(time.time() * 1e7))))
+        os.path.curdir,
+        "tmp-runs",
+        str(int(time.time() * 1e7))))
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
@@ -550,14 +396,13 @@ def train(train_data, val_data, model, class_names, criterion, args):
 
     if args.lr_scheduler == 'ReduceLROnPlateau':
         schedulerG = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optG, 'max', patience=args.patience//2, factor=0.1, verbose=True)
+            optG, 'max', patience=args.patience // 2, factor=0.1, verbose=True)
         # schedulerCLF = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #     optCLF, 'max', patience=args.patience // 2, factor=0.1, verbose=True)
 
     elif args.lr_scheduler == 'ExponentialLR':
         schedulerG = torch.optim.lr_scheduler.ExponentialLR(optG, gamma=args.ExponentialLR_gamma)
         # schedulerCLF = torch.optim.lr_scheduler.ExponentialLR(optCLF, gamma=args.ExponentialLR_gamma)
-
 
     print("{}, Start training".format(
         datetime.datetime.now()), flush=True)
@@ -582,14 +427,14 @@ def train(train_data, val_data, model, class_names, criterion, args):
 
         train_gen = ParallelSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
 
-        sampled_tasks = train_gen.get_epoch()   #此处并非返回数据，而是生成函数迭代器！！！
+        sampled_tasks = train_gen.get_epoch()
 
         grad = {'clf': [], 'G': []}
 
         if not args.notqdm:
             sampled_tasks = tqdm(sampled_tasks, total=train_gen.num_episodes,
-                    ncols=80, leave=False, desc=colored('Training on train',
-                        'yellow'))
+                                 ncols=80, leave=False, desc=colored('Training on train',
+                                                                     'yellow'))
 
         for task in sampled_tasks:
             if task is None:
@@ -599,13 +444,15 @@ def train(train_data, val_data, model, class_names, criterion, args):
             loss += q_loss
 
         if ep % 100 == 0:
-            print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(q_acc.item()) + "-----------")
+            print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(
+                q_acc.item()) + "-----------")
 
         test_count = 500
         if (ep % test_count == 0) and (ep != 0):
             acc = acc / args.train_episodes / test_count
             loss = loss / args.train_episodes / test_count
-            print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(acc.item()) + "-----------")
+            print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(
+                acc.item()) + "-----------")
 
             net = copy.deepcopy(model)
             # acc, std = test(train_data, class_names, optG, net, criterion, args, args.test_epochs, False)
@@ -622,14 +469,14 @@ def train(train_data, val_data, model, class_names, criterion, args):
             cur_acc, cur_std = test(val_data, class_names, optG, net, criterion, args, args.test_epochs, False)
             print(("[EVAL] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f}, "
                    "{:s} {:s}{:>7.4f}, {:s}{:>7.4f}").format(
-                   datetime.datetime.now(),
-                   "ep", ep,
-                   colored("val  ", "cyan"),
-                   colored("acc:", "blue"), cur_acc, cur_std,
-                   colored("train stats", "cyan"),
-                   colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
-                   colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
-                   ), flush=True)
+                datetime.datetime.now(),
+                "ep", ep,
+                colored("val  ", "cyan"),
+                colored("acc:", "blue"), cur_acc, cur_std,
+                # colored("train stats", "cyan"),
+                # colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
+                # colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
+            ), flush=True)
 
             # Update the current best model if val acc is better
             if cur_acc > best_acc:
@@ -662,8 +509,8 @@ def train(train_data, val_data, model, class_names, criterion, args):
                 # schedulerCLF.step()
 
     print("{}, End of training. Restore the best weights".format(
-            datetime.datetime.now()),
-            flush=True)
+        datetime.datetime.now()),
+        flush=True)
 
     # restore the best saved model
     model['G'].load_state_dict(torch.load(best_path + '.G'))
@@ -673,9 +520,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
     if args.save:
         # save the current model
         out_dir = os.path.abspath(os.path.join(
-                                      os.path.curdir,
-                                      "saved-runs",
-                                      str(int(time.time() * 1e7))))
+            os.path.curdir,
+            "saved-runs",
+            str(int(time.time() * 1e7))))
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
@@ -726,7 +573,9 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
 
     """维度填充"""
     if support['text'].shape[1] != class_names_dict['text'].shape[1]:
-        zero = torch.zeros((class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]), dtype=torch.long)
+        zero = torch.zeros(
+            (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
+            dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
@@ -785,26 +634,67 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     # print("2222222", support['label_2'])
     # print(support['label_final'])
 
-
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     loss = criterion(S_out1, S_out2, support['label_final'])
+    # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
-    grads = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True)
-    fast_weights, orderd_params = model['G'].cloned_fc_dict(), OrderedDict()
-    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads):
-        fast_weights[key] = orderd_params[key] = val-args.task_lr*grad
+
+    grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_fc, orderd_params_fc = model['G'].cloned_fc_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].fc.named_parameters(), grads_fc):
+        fast_weights_fc[key] = orderd_params_fc[key] = val - args.task_lr * grad
+
+    grads_conv11 = autograd.grad(loss, model['G'].conv11.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv11, orderd_params_conv11 = model['G'].cloned_conv11_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv11.named_parameters(), grads_conv11):
+        fast_weights_conv11[key] = orderd_params_conv11[key] = val - args.task_lr * grad
+
+    grads_conv12 = autograd.grad(loss, model['G'].conv12.parameters(), allow_unused=True, retain_graph=True)
+    fast_weights_conv12, orderd_params_conv12 = model['G'].cloned_conv12_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv12.named_parameters(), grads_conv12):
+        fast_weights_conv12[key] = orderd_params_conv12[key] = val - args.task_lr * grad
+
+    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True)
+    fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
+    for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
+        fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
+
+    fast_weights = {}
+    fast_weights['fc'] = fast_weights_fc
+    fast_weights['conv11'] = fast_weights_conv11
+    fast_weights['conv12'] = fast_weights_conv12
+    fast_weights['conv13'] = fast_weights_conv13
+
     '''steps remaining'''
-    for k in range(args.train_iter - 1):
+    for k in range(args.test_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         loss = criterion(S_out1, S_out2, support['label_final'])
-        zero_grad(orderd_params.values())
-        grads = torch.autograd.grad(loss, orderd_params.values(), allow_unused=True)
-        # print('grads:', grads)
-        # print("orderd_params.items():", orderd_params.items())
-        for (key, val), grad in zip(orderd_params.items(), grads):
+        # print("train_iter: {} s_loss:{}".format(k, loss))
+        zero_grad(orderd_params_fc.values())
+        zero_grad(orderd_params_conv11.values())
+        zero_grad(orderd_params_conv12.values())
+        zero_grad(orderd_params_conv13.values())
+        grads_fc = torch.autograd.grad(loss, orderd_params_fc.values(), allow_unused=True, retain_graph=True)
+        grads_conv11 = torch.autograd.grad(loss, orderd_params_conv11.values(), allow_unused=True, retain_graph=True)
+        grads_conv12 = torch.autograd.grad(loss, orderd_params_conv12.values(), allow_unused=True, retain_graph=True)
+        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True)
+
+        for (key, val), grad in zip(orderd_params_fc.items(), grads_fc):
             if grad is not None:
-                fast_weights[key] = orderd_params[key] = val - args.task_lr * grad
+                fast_weights['fc'][key] = orderd_params_fc[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv11.items(), grads_conv11):
+            if grad is not None:
+                fast_weights['conv11'][key] = orderd_params_conv11[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv12.items(), grads_conv12):
+            if grad is not None:
+                fast_weights['conv12'][key] = orderd_params_conv12[key] = val - args.task_lr * grad
+
+        for (key, val), grad in zip(orderd_params_conv13.items(), grads_conv13):
+            if grad is not None:
+                fast_weights['conv13'][key] = orderd_params_conv13[key] = val - args.task_lr * grad
 
     """计算Q上的损失"""
     CN = model['G'].forward_once_with_param(class_names_dict, fast_weights)
@@ -825,39 +715,12 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
     acc = []
     for ep in range(num_episodes):
-        # if args.embedding == 'mlada':
-        #     acc1, d_acc1, sentence_ebd, avg_sentence_ebd, sentence_label, word_weight, query_data, x_hat = test_one(task, model, args)
-        #     if count < 20:
-        #         if all_sentence_ebd is None:
-        #             all_sentence_ebd = sentence_ebd
-        #             all_avg_sentence_ebd = avg_sentence_ebd
-        #             all_sentence_label = sentence_label
-        #             all_word_weight = word_weight
-        #             all_query_data = query_data
-        #             all_x_hat = x_hat
-        #         else:
-        #             all_sentence_ebd = np.concatenate((all_sentence_ebd, sentence_ebd), 0)
-        #             all_avg_sentence_ebd = np.concatenate((all_avg_sentence_ebd, avg_sentence_ebd), 0)
-        #             all_sentence_label = np.concatenate((all_sentence_label, sentence_label))
-        #             all_word_weight = np.concatenate((all_word_weight, word_weight), 0)
-        #             all_query_data = np.concatenate((all_query_data, query_data), 0)
-        #             all_x_hat = np.concatenate((all_x_hat, x_hat), 0)
-        #     count = count + 1
-        #     acc.append(acc1)
-        #     d_acc.append(d_acc1)
-        # else:
-        #     acc.append(test_one(task, model, args))
+
         sampled_classes, source_classes = task_sampler(test_data, args)
-        # class_names_dict = {}
-        # class_names_dict['label'] = class_names['label'][sampled_classes]
-        # class_names_dict['text'] = class_names['text'][sampled_classes]
-        # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
-        # class_names_dict['is_support'] = False
 
         train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
-        # class_names_dict = utils.to_tensor(class_names_dict, args.cuda, exclude_keys=['is_support'])
 
         grad = {'clf': [], 'G': []}
 
@@ -882,7 +745,7 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
                 np.mean(acc),
                 colored("test std", "blue"),
                 np.std(acc),
-                ), flush=True)
+            ), flush=True)
         else:
             print("{}, {:s} {:>7.4f}, {:s} {:>7.4f}".format(
                 datetime.datetime.now(),
@@ -896,7 +759,6 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
 
 def main():
-
     args = parse_args()
 
     print_args(args)
@@ -910,7 +772,17 @@ def main():
 
     # initialize model
     model = {}
-    model["G"] = get_embedding(vocab, args)  # model["G"]里面 是 词向量平均 + FC
+    model["G"] = get_embedding(vocab, args)
+    print("-------------------------------------param----------------------------------------------")
+    sum = 0
+    for name, param in model["G"].named_parameters():
+        num = 1
+        for size in param.shape:
+            num *= size
+        sum += num
+        print("{:30s} : {}".format(name, param.shape))
+    print("total param num {}".format(sum))
+    print("-------------------------------------param----------------------------------------------")
 
     criterion = ContrastiveLoss()
     # model["G2"] = get_embedding_M2(vocab, args)
@@ -918,7 +790,7 @@ def main():
 
     if args.mode == "train":
         # train model on train_data, early stopping based on val_data
-        optG = train(train_data, val_data, model, class_names, criterion, args)  # 使用孪生网络
+        optG = train(train_data, val_data, model, class_names, criterion, args)
 
     # val_acc, val_std, _ = test(val_data, model, args,
     #                                         args.val_episodes)
