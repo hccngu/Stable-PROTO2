@@ -77,7 +77,7 @@ class ModelG(nn.Module):
         self.conv12 = nn.Conv2d(ci, kernel_num, (kernel_size[1], self.ebd_dim))
         self.conv13 = nn.Conv2d(ci, kernel_num, (kernel_size[2], self.ebd_dim))
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(len(kernel_size) * kernel_num, 128)
+        self.fc = nn.Linear(len(kernel_size) * kernel_num, 64)
 
         self.cost = nn.CrossEntropyLoss()
 
@@ -161,7 +161,7 @@ class ModelG(nn.Module):
         return {key: val.clone() for key, val in self.conv13.state_dict().items()}
 
     def loss(self, logits, label):
-        loss_ce = self.cost(-logits/torch.mean(logits, dim=0), label)
+        loss_ce = self.cost(-logits/torch.mean(logits, dim=1, keepdim=True), label)
         return loss_ce
 
     def accuracy(self, pred, label):
@@ -180,16 +180,20 @@ class ContrastiveLoss(torch.nn.Module):
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     """
 
-    def __init__(self, margin=2.0):
+    def __init__(self, margin=2):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
-        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance, dim=0)
+        # print("**********************************************************************")
+        # print("euclidean_distance:", euclidean_distance.shape, torch.mean(euclidean_distance, dim=0))
+        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
+        # print("euclidean_distance_after_mean:", euclidean_distance)
         loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
                                       (1-label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
 
+        # print("**********************************************************************")
         return loss_contrastive
 
 
@@ -308,7 +312,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     for (key, val), grad in zip(model['G'].conv12.named_parameters(), grads_conv12):
         fast_weights_conv12[key] = orderd_params_conv12[key] = val - args.task_lr * grad
 
-    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True, retain_graph=True)
+    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True)
     fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
         fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
@@ -331,7 +335,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
         grads_fc = torch.autograd.grad(loss, orderd_params_fc.values(), allow_unused=True, retain_graph=True)
         grads_conv11 = torch.autograd.grad(loss, orderd_params_conv11.values(), allow_unused=True, retain_graph=True)
         grads_conv12 = torch.autograd.grad(loss, orderd_params_conv12.values(), allow_unused=True, retain_graph=True)
-        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True, retain_graph=True)
+        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True)
         # print('grads:', grads)
         # print("orderd_params.items():", orderd_params.items())
         for (key, val), grad in zip(orderd_params_fc.items(), grads_fc):
@@ -648,7 +652,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     for (key, val), grad in zip(model['G'].conv12.named_parameters(), grads_conv12):
         fast_weights_conv12[key] = orderd_params_conv12[key] = val - args.task_lr * grad
 
-    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True, retain_graph=True)
+    grads_conv13 = autograd.grad(loss, model['G'].conv13.parameters(), allow_unused=True)
     fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
         fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
@@ -671,7 +675,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
         grads_fc = torch.autograd.grad(loss, orderd_params_fc.values(), allow_unused=True, retain_graph=True)
         grads_conv11 = torch.autograd.grad(loss, orderd_params_conv11.values(), allow_unused=True, retain_graph=True)
         grads_conv12 = torch.autograd.grad(loss, orderd_params_conv12.values(), allow_unused=True, retain_graph=True)
-        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True, retain_graph=True)
+        grads_conv13 = torch.autograd.grad(loss, orderd_params_conv13.values(), allow_unused=True)
 
         for (key, val), grad in zip(orderd_params_fc.items(), grads_fc):
             if grad is not None:
