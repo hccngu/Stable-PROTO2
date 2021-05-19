@@ -250,30 +250,30 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     support['label_1'] = support['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
+            for j in range(1, len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
+            for j in range(len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-    support['text_2'] = support['text'][0].view((1, -1))
-    support['text_len_2'] = support['text_len'][0].view(-1)
-    support['label_2'] = support['label'][0].view(-1)
+    support['text_2'] = class_names_dict['text'][0].view((1, -1))
+    support['text_len_2'] = class_names_dict['text_len'][0].view(-1)
+    support['label_2'] = class_names_dict['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(1, len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
 
     # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
     # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
@@ -591,30 +591,30 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     support['label_1'] = support['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
+            for j in range(1, len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
+            for j in range(len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-    support['text_2'] = support['text'][0].view((1, -1))
-    support['text_len_2'] = support['text_len'][0].view(-1)
-    support['label_2'] = support['label'][0].view(-1)
+    support['text_2'] = class_names_dict['text'][0].view((1, -1))
+    support['text_len_2'] = class_names_dict['text_len'][0].view(-1)
+    support['label_2'] = class_names_dict['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(1, len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
 
     # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
     # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
