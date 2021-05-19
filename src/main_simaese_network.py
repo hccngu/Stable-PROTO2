@@ -15,7 +15,7 @@ import torch.nn as nn
 from embedding.rnn import RNN
 import torch.nn.functional as F
 from train.utils import grad_param, get_norm
-from dataset.sampler import ParallelSampler, ParallelSampler_Test, task_sampler
+from dataset.sampler import ParallelSampler, task_sampler
 from dataset import utils
 from tools.tool import neg_dist, reidx_y
 from tqdm import tqdm
@@ -580,10 +580,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
         # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
         # class_names_dict['is_support'] = False
 
-
         train_gen = ParallelSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
 
-        sampled_tasks = train_gen.get_epoch()
+        sampled_tasks = train_gen.get_epoch()   #此处并非返回数据，而是生成函数迭代器！！！
 
         grad = {'clf': [], 'G': []}
 
@@ -911,7 +910,7 @@ def main():
 
     # initialize model
     model = {}
-    model["G"] = get_embedding(vocab, args)
+    model["G"] = get_embedding(vocab, args)  # model["G"]里面 是 词向量平均 + FC
 
     criterion = ContrastiveLoss()
     # model["G2"] = get_embedding_M2(vocab, args)
@@ -919,7 +918,7 @@ def main():
 
     if args.mode == "train":
         # train model on train_data, early stopping based on val_data
-        optG = train(train_data, val_data, model, class_names, criterion, args)
+        optG = train(train_data, val_data, model, class_names, criterion, args)  # 使用孪生网络
 
     # val_acc, val_std, _ = test(val_data, model, args,
     #                                         args.val_episodes)
