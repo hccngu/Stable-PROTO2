@@ -15,7 +15,7 @@ import torch.nn as nn
 from embedding.rnn import RNN
 import torch.nn.functional as F
 from train.utils import grad_param, get_norm
-from dataset.sampler import ParallelSampler, ParallelSampler_Test, task_sampler
+from dataset.sampler2 import SerialSampler, task_sampler
 from dataset import utils
 from tools.tool import neg_dist, reidx_y
 from tqdm import tqdm
@@ -133,7 +133,7 @@ class ModelG(nn.Module):
 
         x = torch.cat((x1, x2, x3), 1)  # [b, 3 * kernel_num]
         x = self.dropout(x)
-        
+
         w_fc, b_fc = param['fc']['weight'], param['fc']['bias']
         x = F.linear(x, w_fc, b_fc)  # [b, 128]
 
@@ -150,18 +150,18 @@ class ModelG(nn.Module):
 
     def cloned_fc_dict(self):
         return {key: val.clone() for key, val in self.fc.state_dict().items()}
-    
+
     def cloned_conv11_dict(self):
         return {key: val.clone() for key, val in self.conv11.state_dict().items()}
-    
+
     def cloned_conv12_dict(self):
         return {key: val.clone() for key, val in self.conv12.state_dict().items()}
-    
+
     def cloned_conv13_dict(self):
         return {key: val.clone() for key, val in self.conv13.state_dict().items()}
 
     def loss(self, logits, label):
-        loss_ce = self.cost(-logits/torch.mean(logits, dim=1, keepdim=True), label)
+        loss_ce = self.cost(-logits / torch.mean(logits, dim=1, keepdim=True), label)
         return loss_ce
 
     def accuracy(self, pred, label):
@@ -173,7 +173,7 @@ class ModelG(nn.Module):
         return torch.mean((pred.view(-1) == label).type(torch.FloatTensor))
 
 
-#自定义ContrastiveLoss
+# 自定义ContrastiveLoss
 class ContrastiveLoss(torch.nn.Module):
     """
     Contrastive loss function.
@@ -191,7 +191,8 @@ class ContrastiveLoss(torch.nn.Module):
         euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
         # print("euclidean_distance_after_mean:", euclidean_distance)
         loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
-                                      (1-label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+                                      (1 - label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0),
+                                                              2))
 
         # print("**********************************************************************")
         return loss_contrastive
@@ -231,7 +232,9 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
 
     """维度填充"""
     if support['text'].shape[1] != class_names_dict['text'].shape[1]:
-        zero = torch.zeros((class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]), dtype=torch.long)
+        zero = torch.zeros(
+            (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
+            dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
@@ -247,30 +250,30 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     support['label_1'] = support['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
+            for j in range(1, len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
+            for j in range(len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-    support['text_2'] = support['text'][0].view((1, -1))
-    support['text_len_2'] = support['text_len'][0].view(-1)
-    support['label_2'] = support['label'][0].view(-1)
+    support['text_2'] = class_names_dict['text'][0].view((1, -1))
+    support['text_len_2'] = class_names_dict['text_len'][0].view(-1)
+    support['label_2'] = class_names_dict['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(1, len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
 
     # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
     # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
@@ -290,18 +293,17 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     # print("2222222", support['label_2'])
     # print(support['label_final'])
 
-
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     print("-------0S1_2:", S_out1.shape, S_out2.shape)
     loss = criterion(S_out1, S_out2, support['label_final'])
     print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
-    
+
     grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
     fast_weights_fc, orderd_params_fc = model['G'].cloned_fc_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].fc.named_parameters(), grads_fc):
-        fast_weights_fc[key] = orderd_params_fc[key] = val-args.task_lr*grad
+        fast_weights_fc[key] = orderd_params_fc[key] = val - args.task_lr * grad
 
     grads_conv11 = autograd.grad(loss, model['G'].conv11.parameters(), allow_unused=True, retain_graph=True)
     fast_weights_conv11, orderd_params_conv11 = model['G'].cloned_conv11_dict(), OrderedDict()
@@ -317,13 +319,13 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
         fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
-        
+
     fast_weights = {}
     fast_weights['fc'] = fast_weights_fc
     fast_weights['conv11'] = fast_weights_conv11
     fast_weights['conv12'] = fast_weights_conv12
     fast_weights['conv13'] = fast_weights_conv13
-    
+
     '''steps remaining'''
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
@@ -347,11 +349,11 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
         for (key, val), grad in zip(orderd_params_conv11.items(), grads_conv11):
             if grad is not None:
                 fast_weights['conv11'][key] = orderd_params_conv11[key] = val - args.task_lr * grad
-        
+
         for (key, val), grad in zip(orderd_params_conv12.items(), grads_conv12):
             if grad is not None:
                 fast_weights['conv12'][key] = orderd_params_conv12[key] = val - args.task_lr * grad
-        
+
         for (key, val), grad in zip(orderd_params_conv13.items(), grads_conv13):
             if grad is not None:
                 fast_weights['conv13'][key] = orderd_params_conv13[key] = val - args.task_lr * grad
@@ -380,9 +382,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
     '''
     # creating a tmp directory to save the models
     out_dir = os.path.abspath(os.path.join(
-                                  os.path.curdir,
-                                  "tmp-runs",
-                                  str(int(time.time() * 1e7))))
+        os.path.curdir,
+        "tmp-runs",
+        str(int(time.time() * 1e7))))
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
@@ -396,7 +398,7 @@ def train(train_data, val_data, model, class_names, criterion, args):
 
     if args.lr_scheduler == 'ReduceLROnPlateau':
         schedulerG = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optG, 'max', patience=args.patience//2, factor=0.1, verbose=True)
+            optG, 'max', patience=args.patience // 2, factor=0.1, verbose=True)
         # schedulerCLF = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #     optCLF, 'max', patience=args.patience // 2, factor=0.1, verbose=True)
 
@@ -404,13 +406,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
         schedulerG = torch.optim.lr_scheduler.ExponentialLR(optG, gamma=args.ExponentialLR_gamma)
         # schedulerCLF = torch.optim.lr_scheduler.ExponentialLR(optCLF, gamma=args.ExponentialLR_gamma)
 
-
     print("{}, Start training".format(
         datetime.datetime.now()), flush=True)
 
-    # train_gen = ParallelSampler(train_data, args, args.train_episodes)
-    # train_gen_val = ParallelSampler_Test(train_data, args, args.val_episodes)
-    # val_gen = ParallelSampler_Test(val_data, args, args.val_episodes)
 
     # sampled_classes, source_classes = task_sampler(train_data, args)
     acc = 0
@@ -426,8 +424,7 @@ def train(train_data, val_data, model, class_names, criterion, args):
         # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
         # class_names_dict['is_support'] = False
 
-
-        train_gen = ParallelSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
+        train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
 
@@ -435,8 +432,8 @@ def train(train_data, val_data, model, class_names, criterion, args):
 
         if not args.notqdm:
             sampled_tasks = tqdm(sampled_tasks, total=train_gen.num_episodes,
-                    ncols=80, leave=False, desc=colored('Training on train',
-                        'yellow'))
+                                 ncols=80, leave=False, desc=colored('Training on train',
+                                                                     'yellow'))
 
         for task in sampled_tasks:
             if task is None:
@@ -446,13 +443,15 @@ def train(train_data, val_data, model, class_names, criterion, args):
             loss += q_loss
 
         if ep % 100 == 0:
-            print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(q_acc.item()) + "-----------")
+            print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(
+                q_acc.item()) + "-----------")
 
         test_count = 500
         if (ep % test_count == 0) and (ep != 0):
             acc = acc / args.train_episodes / test_count
             loss = loss / args.train_episodes / test_count
-            print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(acc.item()) + "-----------")
+            print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(
+                acc.item()) + "-----------")
 
             net = copy.deepcopy(model)
             # acc, std = test(train_data, class_names, optG, net, criterion, args, args.test_epochs, False)
@@ -469,14 +468,14 @@ def train(train_data, val_data, model, class_names, criterion, args):
             cur_acc, cur_std = test(val_data, class_names, optG, net, criterion, args, args.test_epochs, False)
             print(("[EVAL] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f}, "
                    "{:s} {:s}{:>7.4f}, {:s}{:>7.4f}").format(
-                   datetime.datetime.now(),
-                   "ep", ep,
-                   colored("val  ", "cyan"),
-                   colored("acc:", "blue"), cur_acc, cur_std,
-                   # colored("train stats", "cyan"),
-                   # colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
-                   # colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
-                   ), flush=True)
+                datetime.datetime.now(),
+                "ep", ep,
+                colored("val  ", "cyan"),
+                colored("acc:", "blue"), cur_acc, cur_std,
+                # colored("train stats", "cyan"),
+                # colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
+                # colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
+            ), flush=True)
 
             # Update the current best model if val acc is better
             if cur_acc > best_acc:
@@ -509,8 +508,8 @@ def train(train_data, val_data, model, class_names, criterion, args):
                 # schedulerCLF.step()
 
     print("{}, End of training. Restore the best weights".format(
-            datetime.datetime.now()),
-            flush=True)
+        datetime.datetime.now()),
+        flush=True)
 
     # restore the best saved model
     model['G'].load_state_dict(torch.load(best_path + '.G'))
@@ -520,9 +519,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
     if args.save:
         # save the current model
         out_dir = os.path.abspath(os.path.join(
-                                      os.path.curdir,
-                                      "saved-runs",
-                                      str(int(time.time() * 1e7))))
+            os.path.curdir,
+            "saved-runs",
+            str(int(time.time() * 1e7))))
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
@@ -573,7 +572,9 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
 
     """维度填充"""
     if support['text'].shape[1] != class_names_dict['text'].shape[1]:
-        zero = torch.zeros((class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]), dtype=torch.long)
+        zero = torch.zeros(
+            (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
+            dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
@@ -589,30 +590,30 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     support['label_1'] = support['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
+            for j in range(1, len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
+            for j in range(len(sampled_classes)):
                 support['text_1'] = torch.cat((support['text_1'], support['text'][i].view((1, -1))), dim=0)
                 support['text_len_1'] = torch.cat((support['text_len_1'], support['text_len'][i].view(-1)), dim=0)
                 support['label_1'] = torch.cat((support['label_1'], support['label'][i].view(-1)), dim=0)
 
-    support['text_2'] = support['text'][0].view((1, -1))
-    support['text_len_2'] = support['text_len'][0].view(-1)
-    support['label_2'] = support['label'][0].view(-1)
+    support['text_2'] = class_names_dict['text'][0].view((1, -1))
+    support['text_len_2'] = class_names_dict['text_len'][0].view(-1)
+    support['label_2'] = class_names_dict['label'][0].view(-1)
     for i in range(text_sample_len):
         if i == 0:
-            for j in range(1, text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(1, len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
         else:
-            for j in range(text_sample_len):
-                support['text_2'] = torch.cat((support['text_2'], support['text'][j].view((1, -1))), dim=0)
-                support['text_len_2'] = torch.cat((support['text_len_2'], support['text_len'][j].view(-1)), dim=0)
-                support['label_2'] = torch.cat((support['label_2'], support['label'][j].view(-1)), dim=0)
+            for j in range(len(sampled_classes)):
+                support['text_2'] = torch.cat((support['text_2'], class_names_dict['text'][j].view((1, -1))), dim=0)
+                support['text_len_2'] = torch.cat((support['text_len_2'], class_names_dict['text_len'][j].view(-1)),dim=0)
+                support['label_2'] = torch.cat((support['label_2'], class_names_dict['label'][j].view(-1)), dim=0)
 
     # print("support['text_1']:", support['text_1'].shape, support['text_len_1'].shape, support['label_1'].shape)
     # print("support['text_2']:", support['text_2'].shape, support['text_len_2'].shape, support['label_2'].shape)
@@ -632,7 +633,6 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     # print("2222222", support['label_2'])
     # print(support['label_final'])
 
-
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     loss = criterion(S_out1, S_out2, support['label_final'])
@@ -642,7 +642,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
     fast_weights_fc, orderd_params_fc = model['G'].cloned_fc_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].fc.named_parameters(), grads_fc):
-        fast_weights_fc[key] = orderd_params_fc[key] = val-args.task_lr*grad
+        fast_weights_fc[key] = orderd_params_fc[key] = val - args.task_lr * grad
 
     grads_conv11 = autograd.grad(loss, model['G'].conv11.parameters(), allow_unused=True, retain_graph=True)
     fast_weights_conv11, orderd_params_conv11 = model['G'].cloned_conv11_dict(), OrderedDict()
@@ -717,7 +717,7 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
         sampled_classes, source_classes = task_sampler(test_data, args)
 
-        train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
+        train_gen = SerialSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
 
@@ -744,7 +744,7 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
                 np.mean(acc),
                 colored("test std", "blue"),
                 np.std(acc),
-                ), flush=True)
+            ), flush=True)
         else:
             print("{}, {:s} {:>7.4f}, {:s} {:>7.4f}".format(
                 datetime.datetime.now(),
@@ -758,7 +758,6 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
 
 def main():
-
     args = parse_args()
 
     print_args(args)
