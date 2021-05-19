@@ -180,14 +180,14 @@ class ContrastiveLoss(torch.nn.Module):
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     """
 
-    def __init__(self, margin=2):
+    def __init__(self, margin=2.0):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
         # print("**********************************************************************")
-        # print("euclidean_distance:", euclidean_distance.shape, torch.mean(euclidean_distance, dim=0))
+        print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
         euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
         # print("euclidean_distance_after_mean:", euclidean_distance)
         loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
@@ -293,8 +293,9 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
+    print("-------0S1_2:", S_out1.shape, S_out2.shape)
     loss = criterion(S_out1, S_out2, support['label_final'])
-    # print("s_1_loss:", loss)
+    print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
     
     grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
@@ -326,6 +327,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     '''steps remaining'''
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
+        print("-------1S1_2:", S_out1, S_out2)
         loss = criterion(S_out1, S_out2, support['label_final'])
         # print("train_iter: {} s_loss:{}".format(k, loss))
         zero_grad(orderd_params_fc.values())
