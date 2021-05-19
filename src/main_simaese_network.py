@@ -15,7 +15,7 @@ import torch.nn as nn
 from embedding.rnn import RNN
 import torch.nn.functional as F
 from train.utils import grad_param, get_norm
-from dataset.sampler import ParallelSampler, ParallelSampler_Test, task_sampler
+from dataset.sampler2 import SerialSampler, task_sampler
 from dataset import utils
 from tools.tool import neg_dist, reidx_y
 from tqdm import tqdm
@@ -407,9 +407,6 @@ def train(train_data, val_data, model, class_names, criterion, args):
     print("{}, Start training".format(
         datetime.datetime.now()), flush=True)
 
-    # train_gen = ParallelSampler(train_data, args, args.train_episodes)
-    # train_gen_val = ParallelSampler_Test(train_data, args, args.val_episodes)
-    # val_gen = ParallelSampler_Test(val_data, args, args.val_episodes)
 
     # sampled_classes, source_classes = task_sampler(train_data, args)
     acc = 0
@@ -425,7 +422,7 @@ def train(train_data, val_data, model, class_names, criterion, args):
         # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
         # class_names_dict['is_support'] = False
 
-        train_gen = ParallelSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
+        train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
 
@@ -718,7 +715,7 @@ def test(test_data, class_names, optG, model, criterion, args, num_episodes, ver
 
         sampled_classes, source_classes = task_sampler(test_data, args)
 
-        train_gen = ParallelSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
+        train_gen = SerialSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
 
         sampled_tasks = train_gen.get_epoch()
 
