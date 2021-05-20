@@ -84,6 +84,7 @@ class ModelG(nn.Module):
     def forward_once(self, data):
 
         ebd = self.ebd(data)  # [b, text_len, 300]
+        ebd = ebd[:, :10, :]
         ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
         x1 = self.conv11(ebd)  # [b, kernel_num, H_out, 1]
@@ -102,9 +103,10 @@ class ModelG(nn.Module):
         x3 = F.max_pool1d(x3, x3.size(2)).squeeze(2)  # [b, kernel_num]
 
         x = torch.cat((x1, x2, x3), 1)  # [b, 3 * kernel_num]
-        x = self.dropout(x)
+        # x = self.dropout(x)
 
         x = self.fc(x)  # [b, 128]
+        x = self.dropout(x)
 
         return x
 
@@ -132,10 +134,11 @@ class ModelG(nn.Module):
         x3 = F.max_pool1d(x3, x3.size(2)).squeeze(2)  # [b, kernel_num]
 
         x = torch.cat((x1, x2, x3), 1)  # [b, 3 * kernel_num]
-        x = self.dropout(x)
+        # x = self.dropout(x)
 
         w_fc, b_fc = param['fc']['weight'], param['fc']['bias']
         x = F.linear(x, w_fc, b_fc)  # [b, 128]
+        x = self.dropout(x)
 
         return x
 
@@ -187,7 +190,7 @@ class ContrastiveLoss(torch.nn.Module):
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
         # print("**********************************************************************")
-        print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
+        # print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
         euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
         # print("euclidean_distance_after_mean:", euclidean_distance)
         loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
@@ -295,9 +298,9 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
-    print("-------0S1_2:", S_out1.shape, S_out2.shape)
+    # print("-------0S1_2:", S_out1.shape, S_out2.shape)
     loss = criterion(S_out1, S_out2, support['label_final'])
-    print("s_1_loss:", loss)
+    # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
 
     grads_fc = autograd.grad(loss, model['G'].fc.parameters(), allow_unused=True, retain_graph=True)
@@ -329,7 +332,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     '''steps remaining'''
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
-        print("-------1S1_2:", S_out1, S_out2)
+        # print("-------1S1_2:", S_out1, S_out2)
         loss = criterion(S_out1, S_out2, support['label_final'])
         # print("train_iter: {} s_loss:{}".format(k, loss))
         zero_grad(orderd_params_fc.values())
@@ -443,14 +446,14 @@ def train(train_data, val_data, model, class_names, criterion, args):
             loss += q_loss
 
         if ep % 100 == 0:
-            print("--------[TRAIN] ep:" + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(
+            print("{}:".format(colored('--------[TRAIN] ep', 'blue')) + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(
                 q_acc.item()) + "-----------")
 
         test_count = 500
         if (ep % test_count == 0) and (ep != 0):
             acc = acc / args.train_episodes / test_count
             loss = loss / args.train_episodes / test_count
-            print("--------[TRAIN] ep:" + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(
+            print("{}:".format(colored('--------[TRAIN] ep', 'blue')) + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(
                 acc.item()) + "-----------")
 
             net = copy.deepcopy(model)
@@ -467,7 +470,7 @@ def train(train_data, val_data, model, class_names, criterion, args):
             # Evaluate validation accuracy
             cur_acc, cur_std = test(val_data, class_names, optG, net, criterion, args, args.test_epochs, False)
             print(("[EVAL] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f}, "
-                   "{:s} {:s}{:>7.4f}, {:s}{:>7.4f}").format(
+                   ).format(
                 datetime.datetime.now(),
                 "ep", ep,
                 colored("val  ", "cyan"),
