@@ -38,9 +38,9 @@ def parse_args():
                         help="max num of training epochs")
     parser.add_argument("--train_episodes", type=int, default=1,
                         help="#tasks sampled during each training epoch")
-    parser.add_argument("--val_epochs", type=int, default=100,
+    parser.add_argument("--val_epochs", type=int, default=200,
                         help="#asks sampled during each validation epoch")
-    parser.add_argument("--test_epochs", type=int, default=1000,
+    parser.add_argument("--test_epochs", type=int, default=2000,
                         help="#tasks sampled during each testing epoch")
 
     parser.add_argument("--wv_path", type=str,
@@ -58,7 +58,7 @@ def parse_args():
     parser.add_argument("--auxiliary", type=str, nargs="*", default=[],
                         help=("auxiliary embeddings (used for fewrel)."))
     parser.add_argument("--seed", type=int, default=330, help="seed")
-    parser.add_argument("--dropout", type=float, default=0.5, help="drop rate")
+    parser.add_argument("--dropout", type=float, default=0.2, help="drop rate")
     parser.add_argument("--patience", type=int, default=20, help="patience")
     parser.add_argument("--clip_grad", type=float, default=None,
                         help="gradient clipping")
@@ -89,6 +89,7 @@ def parse_args():
     parser.add_argument("--Comments", type=str, default="", help="Comments")
     parser.add_argument("--id2word", default=None, help="id2word")
     parser.add_argument("--task_num", type=int, default=4, help="Number of tasks")
+    parser.add_argument("--weight_decay", type=float, default=1e-4, help="weight decay")
 
 
     # TextCNN

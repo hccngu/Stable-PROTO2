@@ -191,10 +191,10 @@ class ContrastiveLoss(torch.nn.Module):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
         # print("**********************************************************************")
         # print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
-        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
+        # euclidean_distance = euclidean_distance
         # print("euclidean_distance_after_mean:", euclidean_distance)
         loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
-                                      (1 - label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0),
+                                      (1 - label) * torch.pow(torch.clamp(torch.mean(euclidean_distance) - euclidean_distance, min=0.0),
                                                               2))
 
         # print("**********************************************************************")
@@ -371,9 +371,9 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     _, pred = torch.max(logits_q, 1)
     acc_q = model['G'].accuracy(pred, YQ)
 
-    optG.zero_grad()
-    q_loss.backward()
-    optG.step()
+    # optG.zero_grad()
+    # q_loss.backward()
+    # optG.step()
 
     return q_loss, acc_q
 
@@ -395,7 +395,7 @@ def train(train_data, val_data, model, class_names, criterion, args):
     sub_cycle = 0
     best_path = None
 
-    optG = torch.optim.Adam(grad_param(model, ['G']), lr=args.meta_lr)
+    optG = torch.optim.Adam(grad_param(model, ['G']), lr=args.meta_lr, weight_decay=args.weight_decay)
     # optG2 = torch.optim.Adam(grad_param(model, ['G2']), lr=args.task_lr)
     # optCLF = torch.optim.Adam(grad_param(model, ['clf']), lr=args.task_lr)
 
@@ -417,33 +417,35 @@ def train(train_data, val_data, model, class_names, criterion, args):
     acc = 0
     loss = 0
     for ep in range(args.train_epochs):
+        ep_loss = 0
+        for _ in range(args.train_episodes):
 
-        sampled_classes, source_classes = task_sampler(train_data, args)
-        # print("sampled_classes:", sampled_classes)
-        # class_names_dict = {}
-        # class_names_dict['label'] = class_names['label'][sampled_classes]
-        # print("class_names_dict['label']:", class_names_dict['label'])
-        # class_names_dict['text'] = class_names['text'][sampled_classes]
-        # class_names_dict['text_len'] = class_names['text_len'][sampled_classes]
-        # class_names_dict['is_support'] = False
+            sampled_classes, source_classes = task_sampler(train_data, args)
 
-        train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, args.train_episodes)
+            train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, 1)
 
-        sampled_tasks = train_gen.get_epoch()
+            sampled_tasks = train_gen.get_epoch()
 
-        grad = {'clf': [], 'G': []}
+            grad = {'clf': [], 'G': []}
 
-        if not args.notqdm:
-            sampled_tasks = tqdm(sampled_tasks, total=train_gen.num_episodes,
-                                 ncols=80, leave=False, desc=colored('Training on train',
-                                                                     'yellow'))
+            if not args.notqdm:
+                sampled_tasks = tqdm(sampled_tasks, total=train_gen.num_episodes,
+                                     ncols=80, leave=False, desc=colored('Training on train',
+                                                                         'yellow'))
 
-        for task in sampled_tasks:
-            if task is None:
-                break
-            q_loss, q_acc = train_one(task, class_names, model, optG, criterion, args, grad)
-            acc += q_acc
-            loss += q_loss
+            for task in sampled_tasks:
+                if task is None:
+                    break
+                q_loss, q_acc = train_one(task, class_names, model, optG, criterion, args, grad)
+                acc += q_acc
+                loss = loss + q_loss
+                ep_loss = ep_loss + q_loss
+
+        ep_loss = ep_loss / args.train_episodes
+
+        optG.zero_grad()
+        ep_loss.backward()
+        optG.step()
 
         if ep % 100 == 0:
             print("{}:".format(colored('--------[TRAIN] ep', 'blue')) + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(
@@ -548,6 +550,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     '''
         Train the model on one sampled task.
     '''
+    model['G'].eval()
 
     support, query = task
     # print("support, query:", support, query)
@@ -708,33 +711,26 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     return acc_q
 
 
-def test(test_data, class_names, optG, model, criterion, args, num_episodes, verbose=True):
+def test(test_data, class_names, optG, model, criterion, args, test_epoch, verbose=True):
     '''
         Evaluate the model on a bag of sampled tasks. Return the mean accuracy
         and its std.
     '''
-    model['G'].train()
+    # model['G'].train()
 
     acc = []
-    for ep in range(num_episodes):
+    for ep in range(test_epoch):
 
         sampled_classes, source_classes = task_sampler(test_data, args)
 
-        train_gen = SerialSampler(test_data, args, sampled_classes, source_classes, args.train_episodes)
+        train_gen = SerialSampler(test_data, args, sampled_classes, source_classes, 1)
 
         sampled_tasks = train_gen.get_epoch()
-
-        grad = {'clf': [], 'G': []}
-
-        if not args.notqdm:
-            sampled_tasks = tqdm(sampled_tasks, total=train_gen.num_episodes,
-                                 ncols=80, leave=False, desc=colored('Training on train',
-                                                                     'yellow'))
 
         for task in sampled_tasks:
             if task is None:
                 break
-            q_acc = test_one(task, class_names, model, optG, criterion, args, grad)
+            q_acc = test_one(task, class_names, model, optG, criterion, args, grad={})
             acc.append(q_acc.cpu().item())
 
     acc = np.array(acc)
@@ -798,6 +794,15 @@ def main():
     #                                         args.val_episodes)
 
     test_acc, test_std = test(test_data, class_names, optG, model, criterion, args, args.test_epochs, False)
+    print(("[TEST] {}, {:s} {:s}{:>7.4f} ± {:>6.4f}, "
+           ).format(
+        datetime.datetime.now(),
+        colored("test  ", "cyan"),
+        colored("acc:", "blue"), test_acc, test_std,
+        # colored("train stats", "cyan"),
+        # colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
+        # colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
+    ), flush=True)
 
     # path_drawn = args.path_drawn_data
     # with open(path_drawn, 'w') as f_w:

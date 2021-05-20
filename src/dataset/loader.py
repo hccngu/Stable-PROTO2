@@ -78,6 +78,10 @@ def _get_amazon_classes(args):
     test_classes = list(range(5, 14))
     train_classes = list(range(14, 24))
 
+    # val_classes = list(range(19, 24))
+    # test_classes = list(range(9))
+    # train_classes = list(range(9, 19))
+
     return train_classes, val_classes, test_classes, label_dict
 
 
