@@ -189,16 +189,20 @@ class ContrastiveLoss(torch.nn.Module):
 
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
+        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
         # print("**********************************************************************")
         # print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
         # euclidean_distance = euclidean_distance
         # print("euclidean_distance_after_mean:", euclidean_distance)
-        loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
-                                      (1 - label) * torch.pow(torch.clamp(torch.mean(euclidean_distance) - euclidean_distance, min=0.0),
-                                                              2))
+        tmp1 = (label) * torch.pow(euclidean_distance, 2).squeeze(-1)
+        #mean_val = torch.mean(euclidean_distance)
+        tmp2 = (1 - label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0),
+                                       2).squeeze(-1)
+        loss_contrastive = torch.mean(tmp1 + tmp2)
 
         # print("**********************************************************************")
         return loss_contrastive
+
 
 
 def train_one(task, class_names, model, optG, criterion, args, grad):
@@ -664,6 +668,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     fast_weights_conv13, orderd_params_conv13 = model['G'].cloned_conv13_dict(), OrderedDict()
     for (key, val), grad in zip(model['G'].conv13.named_parameters(), grads_conv13):
         fast_weights_conv13[key] = orderd_params_conv13[key] = val - args.task_lr * grad
+
 
     fast_weights = {}
     fast_weights['fc'] = fast_weights_fc
