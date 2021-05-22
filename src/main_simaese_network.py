@@ -77,7 +77,7 @@ class ModelG(nn.Module):
         self.conv12 = nn.Conv2d(ci, kernel_num, (kernel_size[1], self.ebd_dim))
         self.conv13 = nn.Conv2d(ci, kernel_num, (kernel_size[2], self.ebd_dim))
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(len(kernel_size) * kernel_num, 64)
+        self.fc = nn.Linear(len(kernel_size) * kernel_num, args.fc_output_size)
 
         self.cost = nn.CrossEntropyLoss()
 
@@ -190,11 +190,11 @@ class ContrastiveLoss(torch.nn.Module):
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
         # print("**********************************************************************")
-        # print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
-        # euclidean_distance = euclidean_distance
+        # print("euclidean_distance:", torch.mean(euclidean_distance))
+        euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
         # print("euclidean_distance_after_mean:", euclidean_distance)
         loss_contrastive = torch.mean((label) * torch.pow(euclidean_distance, 2) +
-                                      (1 - label) * torch.pow(torch.clamp(torch.mean(euclidean_distance) - euclidean_distance, min=0.0),
+                                      (1 - label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0),
                                                               2))
 
         # print("**********************************************************************")

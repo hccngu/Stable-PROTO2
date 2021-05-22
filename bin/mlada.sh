@@ -43,12 +43,15 @@ python ../src/main_simaese_network.py \
     --test_epochs 200 \
     --val_epochs 200 \
     --train_iter 10 \
-    --test_iter 15 \
-    --meta_lr 1e-3 \
+    --test_iter 10 \
+    --meta_lr 1e-4 \
     --task_lr 7e-2 \
-    --Comments "amazon + weight_decay:5e-4 + dropout:0.2 + lr:1e-3, 7e-2, train_episodes:8" \
+    --Comments "amazon +ReduceLROnPlateau+ weight_decay:1e-5 + dropout:0.5 + lr:1e-4, 7e-2, train_episodes:8, kernel_num:16, fc_output_size:64" \
     --patience 20 \
     --seed 3 \
     --notqdm \
-    --weight_decay 5e-4 \
+    --weight_decay 1e-5 \
     --dropout 0.5 \
+    --kernel_num 16 \
+    --fc_output_size 64 \
+    --lr_scheduler "ReduceLROnPlateau" \
