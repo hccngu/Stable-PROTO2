@@ -62,12 +62,6 @@ class ModelG(nn.Module):
         self.ebd_dim = self.ebd.embedding_dim
         self.hidden_size = 128
 
-        # self.rnn = RNN(300, 128, 1, True, 0)
-        # self.lstm = nn.LSTM(input_size=300, hidden_size=128, num_layers=1, batch_first=True, dropout=0)
-        #
-        # self.seq = nn.Sequential(
-        #     nn.Linear(500, 1),
-        # )
         # Text CNN
         ci = 1  # input chanel size
         kernel_num = args.kernel_num  # output chanel size
@@ -78,13 +72,12 @@ class ModelG(nn.Module):
         self.conv13 = nn.Conv2d(ci, kernel_num, (kernel_size[2], self.ebd_dim))
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(len(kernel_size) * kernel_num, 64)
-
         self.cost = nn.CrossEntropyLoss()
 
     def forward_once(self, data):
 
         ebd = self.ebd(data)  # [b, text_len, 300]
-        ebd = ebd[:, :10, :]
+        #ebd = ebd[:, :10, :]
         ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
         x1 = self.conv11(ebd)  # [b, kernel_num, H_out, 1]
@@ -187,22 +180,18 @@ class ContrastiveLoss(torch.nn.Module):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, output1, output2, label):
+    def forward(self, output1, output2, label, weight):
         euclidean_distance = F.pairwise_distance(output1, output2, keepdim=True)
         euclidean_distance = euclidean_distance / torch.mean(euclidean_distance)
-        # print("**********************************************************************")
-        # print("euclidean_distance:", torch.mean(euclidean_distance, dim=0))
-        # euclidean_distance = euclidean_distance
-        # print("euclidean_distance_after_mean:", euclidean_distance)
+
         tmp1 = (label) * torch.pow(euclidean_distance, 2).squeeze(-1)
-        #mean_val = torch.mean(euclidean_distance)
+        # mean_val = torch.mean(euclidean_distance)
         tmp2 = (1 - label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0),
                                        2).squeeze(-1)
-        loss_contrastive = torch.mean(tmp1 + tmp2)
+        loss_contrastive = torch.mean((tmp1 + tmp2)*weight)
 
         # print("**********************************************************************")
         return loss_contrastive
-
 
 
 def train_one(task, class_names, model, optG, criterion, args, grad):
@@ -295,15 +284,17 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     support_2['text'] = support['text_2']
     support_2['text_len'] = support['text_len_2']
     support_2['label'] = support['label_2']
-    # print("**************************************")
-    # print("1111111", support['label_1'])
-    # print("2222222", support['label_2'])
-    # print(support['label_final'])
+
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     # print("-------0S1_2:", S_out1.shape, S_out2.shape)
-    loss = criterion(S_out1, S_out2, support['label_final'])
+
+    loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
+    if args.cuda != -1:
+        loss_weight = loss_weight.cuda(args.cuda)
+
+    loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
     # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
 
@@ -337,7 +328,11 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         # print("-------1S1_2:", S_out1, S_out2)
-        loss = criterion(S_out1, S_out2, support['label_final'])
+        loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
+        if args.cuda != -1:
+            loss_weight = loss_weight.cuda(args.cuda)
+
+        loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
         # print("train_iter: {} s_loss:{}".format(k, loss))
         zero_grad(orderd_params_fc.values())
         zero_grad(orderd_params_conv11.values())
@@ -645,7 +640,11 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
-    loss = criterion(S_out1, S_out2, support['label_final'])
+    loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])), 0)
+    if args.cuda != -1:
+        loss_weight = loss_weight.cuda(args.cuda)
+
+    loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
     # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
 
@@ -679,7 +678,12 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     '''steps remaining'''
     for k in range(args.test_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
-        loss = criterion(S_out1, S_out2, support['label_final'])
+        loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])),
+                                0)
+        if args.cuda != -1:
+            loss_weight = loss_weight.cuda(args.cuda)
+
+        loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
         # print("train_iter: {} s_loss:{}".format(k, loss))
         zero_grad(orderd_params_fc.values())
         zero_grad(orderd_params_conv11.values())
