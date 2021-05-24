@@ -70,7 +70,7 @@ def parse_args():
                               "[Default: test]"))
     parser.add_argument("--save", action="store_true", default=False,
                         help="train the model")
-    parser.add_argument("--notqdm", action="store_true", default=False,
+    parser.add_argument("--notqdm", action="store_true", default=True,
                         help="disable tqdm")
     parser.add_argument("--result_path", type=str, default="")
     parser.add_argument("--snapshot", type=str, default="",
@@ -95,6 +95,11 @@ def parse_args():
     # TextCNN
     parser.add_argument("--kernel_num", type=int, default=16, help="kernel number: output size of one kernel")
     parser.add_argument("--kernel_size", default=[3, 4, 5], help="kernel size list")
+
+
+    # loss_weight(classname part)
+    parser.add_argument("--loss_weight", type=float, default=10, help="the loss_weight of classname part, default the lossweight of support is 1")
+
 
     return parser.parse_args()
 
@@ -151,6 +156,9 @@ def load_model_state_dict(model, model_path):
 
 def neg_dist(instances, class_proto):  # ins:[N*K, 256], cla:[N, 256]
     return -torch.pow(torch.pow(class_proto.unsqueeze(0) - instances.unsqueeze(1), 2).sum(-1), 0.5)
+
+def pos_dist(instances, class_proto):  # ins:[N*K, 256], cla:[N, 256]
+    return torch.pow(torch.pow(class_proto.unsqueeze(0) - instances.unsqueeze(1), 2).sum(-1), 0.5)
 
 
 def reidx_y(args, YS, YQ):
