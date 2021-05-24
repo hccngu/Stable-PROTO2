@@ -71,7 +71,7 @@ class ModelG(nn.Module):
         self.conv12 = nn.Conv2d(ci, kernel_num, (kernel_size[1], self.ebd_dim))
         self.conv13 = nn.Conv2d(ci, kernel_num, (kernel_size[2], self.ebd_dim))
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(len(kernel_size) * kernel_num, 64)
+        self.fc = nn.Linear(len(kernel_size) * kernel_num, args.fc_output_size)
         self.cost = nn.CrossEntropyLoss()
 
     def forward_once(self, data):

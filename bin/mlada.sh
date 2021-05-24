@@ -39,19 +39,19 @@ python ../src/main_simaese_network.py \
     --n_train_class=$n_train_class \
     --n_val_class=$n_val_class \
     --n_test_class=$n_test_class \
-    --train_episodes 8 \
+    --train_episodes 3 \
     --test_epochs 200 \
     --val_epochs 200 \
     --train_iter 10 \
-    --test_iter 10 \
-    --meta_lr 1e-4 \
-    --task_lr 7e-2 \
-    --Comments "amazon +ReduceLROnPlateau+ weight_decay:1e-5 + dropout:0.5 + lr:1e-4, 7e-2, train_episodes:8, kernel_num:16, fc_output_size:64" \
+    --test_iter 15 \
+    --meta_lr 1e-5 \
+    --task_lr 7e-1 \
+    --Comments "amazon +ReduceLROnPlateau+ weight_decay:1e-5 + dropout:0.5 + lr:1e-5, 7e-2, train_episodes:8, kernel_num:16, fc_output_size:64" \
     --patience 20 \
     --seed 3 \
     --notqdm \
-    --weight_decay 1e-5 \
-    --dropout 0.5 \
+    --weight_decay 0 \
+    --dropout 0.2 \
     --kernel_num 16 \
     --fc_output_size 64 \
     --lr_scheduler "ReduceLROnPlateau" \
