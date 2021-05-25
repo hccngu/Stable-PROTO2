@@ -77,7 +77,7 @@ class ModelG(nn.Module):
     def forward_once(self, data):
 
         ebd = self.ebd(data)  # [b, text_len, 300]
-        #ebd = ebd[:, :10, :]
+        ebd = ebd[:, :10, :]
         ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
         x1 = self.conv11(ebd)  # [b, kernel_num, H_out, 1]
@@ -286,11 +286,12 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     support_2['label'] = support['label_2']
 
 
+
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
     # print("-------0S1_2:", S_out1.shape, S_out2.shape)
 
-    loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
+    loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), args.loss_weight*torch.ones([args.way*args.way])),0 )
     if args.cuda != -1:
         loss_weight = loss_weight.cuda(args.cuda)
 
@@ -328,7 +329,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         # print("-------1S1_2:", S_out1, S_out2)
-        loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
+        loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), args.loss_weight*torch.ones([args.way*args.way])),0 )
         if args.cuda != -1:
             loss_weight = loss_weight.cuda(args.cuda)
 
@@ -640,7 +641,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
-    loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])), 0)
+    loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), args.loss_weight * torch.ones([args.way * args.way])), 0)
     if args.cuda != -1:
         loss_weight = loss_weight.cuda(args.cuda)
 
@@ -678,7 +679,7 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     '''steps remaining'''
     for k in range(args.test_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
-        loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])),
+        loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), args.loss_weight * torch.ones([args.way * args.way])),
                                 0)
         if args.cuda != -1:
             loss_weight = loss_weight.cuda(args.cuda)

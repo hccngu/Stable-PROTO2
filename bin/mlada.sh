@@ -24,8 +24,6 @@ n_test_class=9
 #n_val_class=5
 #n_test_class=11
 #
-
-
 python ../src/main_simaese_network.py \
     --cuda 0 \
     --way 5 \
@@ -40,18 +38,16 @@ python ../src/main_simaese_network.py \
     --n_val_class=$n_val_class \
     --n_test_class=$n_test_class \
     --train_episodes 3 \
-    --test_epochs 200 \
+    --test_epochs 300 \
     --val_epochs 200 \
     --train_iter 10 \
     --test_iter 15 \
     --meta_lr 1e-5 \
     --task_lr 7e-1 \
-    --Comments "amazon +ReduceLROnPlateau+ weight_decay:1e-5 + dropout:0.5 + lr:1e-5, 7e-2, train_episodes:8, kernel_num:16, fc_output_size:64" \
+    --Comments "amazon + weight_decay:5e-4 + dropout:0.2 + lr:1e-3, 7e-2, train_episodes:8" \
     --patience 20 \
     --seed 3 \
     --notqdm \
-    --weight_decay 0 \
+    --weight_decay 1e-4 \
     --dropout 0.2 \
-    --kernel_num 16 \
-    --fc_output_size 64 \
-    --lr_scheduler "ReduceLROnPlateau" \
+    --loss_weight 10.0 \
