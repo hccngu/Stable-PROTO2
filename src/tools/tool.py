@@ -88,14 +88,13 @@ def parse_args():
     parser.add_argument("--path_drawn_data", type=str, default="reuters_False_data.json", help="path_drawn_data")
     parser.add_argument("--Comments", type=str, default="", help="Comments")
     parser.add_argument("--id2word", default=None, help="id2word")
-    # parser.add_argument("--task_num", type=int, default=4, help="Number of tasks")
+    parser.add_argument("--task_num", type=int, default=4, help="Number of tasks")
     parser.add_argument("--weight_decay", type=float, default=1e-4, help="weight decay")
 
 
     # TextCNN
     parser.add_argument("--kernel_num", type=int, default=16, help="kernel number: output size of one kernel")
     parser.add_argument("--kernel_size", default=[3, 4, 5], help="kernel size list")
-    parser.add_argument("--fc_output_size", type=int, default=64, help="output size of fc layer")
 
 
     # loss_weight(classname part)

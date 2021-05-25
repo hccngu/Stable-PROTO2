@@ -3,7 +3,7 @@ import pickle
 import time
 import copy
 import numpy as np
-# hcc
+
 from classifier.classifier_getter import get_classifier
 from tools.tool import parse_args, print_args, set_seed
 # from tools.visualization import Print_Attention
@@ -71,7 +71,7 @@ class ModelG(nn.Module):
         self.conv12 = nn.Conv2d(ci, kernel_num, (kernel_size[1], self.ebd_dim))
         self.conv13 = nn.Conv2d(ci, kernel_num, (kernel_size[2], self.ebd_dim))
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(len(kernel_size) * kernel_num, args.fc_output_size)
+        self.fc = nn.Linear(len(kernel_size) * kernel_num, 64)
         self.cost = nn.CrossEntropyLoss()
 
     def forward_once(self, data):
