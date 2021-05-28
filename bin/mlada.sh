@@ -24,6 +24,17 @@ n_test_class=9
 #n_val_class=5
 #n_test_class=11
 #
+#dataset=fewrel
+#data_path="../data/fewrel.json"
+#n_train_class=65
+#n_val_class=5
+#n_test_class=10
+#
+#dataset=rcv1
+#data_path="../data/rcv1.json"
+#n_train_class=37
+#n_val_class=10
+#n_test_class=24
 python ../src/main_simaese_network.py \
     --cuda 0 \
     --way 5 \
@@ -37,17 +48,18 @@ python ../src/main_simaese_network.py \
     --n_train_class=$n_train_class \
     --n_val_class=$n_val_class \
     --n_test_class=$n_test_class \
-    --train_episodes 3 \
-    --test_epochs 300 \
+    --train_episodes 2 \
+    --test_epochs 200 \
     --val_epochs 200 \
     --train_iter 10 \
-    --test_iter 15 \
+    --test_iter 18 \
     --meta_lr 1e-5 \
     --task_lr 7e-1 \
-    --Comments "amazon + weight_decay:5e-4 + dropout:0.2 + lr:1e-3, 7e-2, train_episodes:8" \
+    --Comments "Amazon" \
     --patience 20 \
     --seed 3 \
     --notqdm \
-    --weight_decay 1e-4 \
+    --weight_decay 1e-5 \
     --dropout 0.2 \
-    --loss_weight 10.0 \
+    --loss_weight 5 \
+#    --STS \
