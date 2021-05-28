@@ -30,6 +30,56 @@ def zero_grad(params):
             p.grad.zero_()
 
 
+def del_tensor_ele(arr, index):
+        arr1 = arr[0:index]
+        arr2 = arr[index + 1:]
+        return torch.cat((arr1, arr2), dim=0)
+
+
+def pre_calculate(train_data, class_names, net, args):
+    with torch.no_grad():
+        all_classes = np.unique(train_data['label'])
+        num_classes = len(all_classes)
+
+        # 生成sample类时候的概率矩阵
+        train_class_names = {}
+        train_class_names['text'] = class_names['text'][all_classes]
+        train_class_names['text_len'] = class_names['text_len'][all_classes]
+        train_class_names['label'] = class_names['label'][all_classes]
+        train_class_names = utils.to_tensor(train_class_names, args.cuda)
+        train_class_names_ebd = net.ebd(train_class_names)  # [10, 36, 300]
+        train_class_names_ebd = torch.sum(train_class_names_ebd, dim=1) / train_class_names['text_len'].view((-1, 1))  # [10, 300]
+        dist_metrix = -neg_dist(train_class_names_ebd, train_class_names_ebd)  # [10, 10]
+
+        for i, d in enumerate(dist_metrix):
+            if i == 0:
+                dist_metrix_nodiag = del_tensor_ele(d, i).view((1, -1))
+            else:
+                dist_metrix_nodiag = torch.cat((dist_metrix_nodiag, del_tensor_ele(d, i).view((1, -1))), dim=0)
+
+        prob_metrix = F.softmax(dist_metrix_nodiag, dim=1)  # [10, 9]
+        prob_metrix = prob_metrix.cpu().numpy()
+
+
+        # 生成sample样本时候的概率矩阵
+        example_prob_metrix = []
+        for i, label in enumerate(all_classes):
+            train_examples = {}
+            train_examples['text'] = train_data['text'][train_data['label'] == label]
+            train_examples['text_len'] = train_data['text_len'][train_data['label'] == label]
+            train_examples['label'] = train_data['label'][train_data['label'] == label]
+            train_examples = utils.to_tensor(train_examples, args.cuda)
+            train_examples_ebd = net.ebd(train_examples)
+            train_examples_ebd = torch.sum(train_examples_ebd, dim=1) / train_examples['text_len'].view(
+                                    (-1, 1))  # [N, 300]
+            example_prob_metrix_one = -neg_dist(train_class_names_ebd[i].view((1, -1)), train_examples_ebd)
+            example_prob_metrix_one = F.softmax(example_prob_metrix_one, dim=1)  # [1, 1000]
+            example_prob_metrix_one = example_prob_metrix_one.cpu().numpy()
+            example_prob_metrix.append(example_prob_metrix_one)
+
+        return prob_metrix, example_prob_metrix
+
+
 def get_embedding(vocab, args):
     print("{}, Building embedding".format(
         datetime.datetime.now()), flush=True)
@@ -227,11 +277,16 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     # print("class_names_dict:", class_names_dict['label'])
 
     """维度填充"""
-    if support['text'].shape[1] != class_names_dict['text'].shape[1]:
+    if support['text'].shape[1] > class_names_dict['text'].shape[1]:
         zero = torch.zeros(
             (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
             dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
+    elif support['text'].shape[1] < class_names_dict['text'].shape[1]:
+        zero = torch.zeros(
+            (support['text'].shape[0], class_names_dict['text'].shape[1] - support['text'].shape[1]),
+            dtype=torch.long)
+        support['text'] = torch.cat((support['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
     support['text_len'] = torch.cat((support['text_len'], class_names_dict['text_len']), dim=0)
@@ -395,6 +450,11 @@ def train(train_data, val_data, model, class_names, criterion, args):
     sub_cycle = 0
     best_path = None
 
+    if args.STS == True:
+        classes_sample_p, example_prob_metrix = pre_calculate(train_data, class_names, model['G'], args)
+    else:
+        classes_sample_p, example_prob_metrix = None, None
+
     optG = torch.optim.Adam(grad_param(model, ['G']), lr=args.meta_lr, weight_decay=args.weight_decay)
     # optG2 = torch.optim.Adam(grad_param(model, ['G2']), lr=args.task_lr)
     # optCLF = torch.optim.Adam(grad_param(model, ['clf']), lr=args.task_lr)
@@ -420,9 +480,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
         ep_loss = 0
         for _ in range(args.train_episodes):
 
-            sampled_classes, source_classes = task_sampler(train_data, args)
+            sampled_classes, source_classes = task_sampler(train_data, args, classes_sample_p)
 
-            train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, 1)
+            train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, 1, example_prob_metrix)
 
             sampled_tasks = train_gen.get_epoch()
 
@@ -577,11 +637,16 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     # print("class_names_dict:", class_names_dict['label'])
 
     """维度填充"""
-    if support['text'].shape[1] != class_names_dict['text'].shape[1]:
+    if support['text'].shape[1] > class_names_dict['text'].shape[1]:
         zero = torch.zeros(
             (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
             dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
+    elif support['text'].shape[1] < class_names_dict['text'].shape[1]:
+        zero = torch.zeros(
+            (support['text'].shape[0], class_names_dict['text'].shape[1] - support['text'].shape[1]),
+            dtype=torch.long)
+        support['text'] = torch.cat((support['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
     support['text_len'] = torch.cat((support['text_len'], class_names_dict['text_len']), dim=0)

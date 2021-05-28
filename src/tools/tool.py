@@ -100,6 +100,8 @@ def parse_args():
     # loss_weight(classname part)
     parser.add_argument("--loss_weight", type=float, default=10, help="the loss_weight of classname part, default the lossweight of support is 1")
 
+    parser.add_argument("--STS", action="store_true", default=False, help="Strategy for task sampling")
+
 
     return parser.parse_args()
 
@@ -178,6 +180,8 @@ def reidx_y(args, YS, YQ):
             'Support set classes are different from the query set')
 
     if len(unique1) != args.way:
+        print("unique1", unique1)
+        print("inv_S", inv_S)
         raise ValueError(
             'Support set classes are different from the number of ways')
 
