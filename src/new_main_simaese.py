@@ -323,12 +323,14 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
-    supp_, que_ = model['G'](support, query)
-    loss_weight = get_weight_of_support(supp_, que_, args)
 
-    # loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
-    # if args.cuda != -1:
-    #     loss_weight = loss_weight.cuda(args.cuda)
+    # supp_, que_ = model['G'](support, query)
+    # loss_weight = get_weight_of_support(supp_, que_, args)
+
+    loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
+    if args.cuda != -1:
+        loss_weight = loss_weight.cuda(args.cuda)
+
 
     loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
     # print("s_1_loss:", loss)
@@ -364,8 +366,13 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         # print("-------1S1_2:", S_out1, S_out2)
-        supp_, que_ = model['G'](support, query, fast_weights)
-        loss_weight = get_weight_of_support(supp_, que_, args)
+
+        # supp_, que_ = model['G'](support, query, fast_weights)
+        # loss_weight = get_weight_of_support(supp_, que_, args)
+
+        loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), 10*torch.ones([args.way*args.way])),0 )
+        if args.cuda != -1:
+            loss_weight = loss_weight.cuda(args.cuda)
 
         loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
         # print("train_iter: {} s_loss:{}".format(k, loss))
@@ -689,11 +696,17 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
-    loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])), 0)
-    if args.cuda != -1:
-        loss_weight = loss_weight.cuda(args.cuda)
+    # loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])), 0)
+    # if args.cuda != -1:
+    #     loss_weight = loss_weight.cuda(args.cuda)
+
+    supp_, que_ = model['G'](support, query)
+    loss_weight = get_weight_of_support(supp_, que_, args)
 
     loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
+
+
+
     # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
 
@@ -727,10 +740,14 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     '''steps remaining'''
     for k in range(args.test_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
-        loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])),
-                                0)
-        if args.cuda != -1:
-            loss_weight = loss_weight.cuda(args.cuda)
+
+        supp_, que_ = model['G'](support, query, fast_weights)
+        loss_weight = get_weight_of_support(supp_, que_, args)
+
+        # loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), 10 * torch.ones([args.way * args.way])),
+        #                         0)
+        # if args.cuda != -1:
+        #     loss_weight = loss_weight.cuda(args.cuda)
 
         loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
         # print("train_iter: {} s_loss:{}".format(k, loss))
