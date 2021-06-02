@@ -17,17 +17,69 @@ import torch.nn.functional as F
 from train.utils import grad_param, get_norm
 from dataset.sampler2 import SerialSampler, task_sampler
 from dataset import utils
-from tools.tool import neg_dist, reidx_y
+from tools.tool import neg_dist, pos_dist, reidx_y
 from tqdm import tqdm
 from termcolor import colored
 from torch import autograd
 from collections import OrderedDict
+
+import sys
 
 
 def zero_grad(params):
     for p in params:
         if p.grad is not None:
             p.grad.zero_()
+
+
+def del_tensor_ele(arr, index):
+        arr1 = arr[0:index]
+        arr2 = arr[index + 1:]
+        return torch.cat((arr1, arr2), dim=0)
+
+
+def pre_calculate(train_data, class_names, net, args):
+    with torch.no_grad():
+        all_classes = np.unique(train_data['label'])
+        num_classes = len(all_classes)
+
+        # 生成sample类时候的概率矩阵
+        train_class_names = {}
+        train_class_names['text'] = class_names['text'][all_classes]
+        train_class_names['text_len'] = class_names['text_len'][all_classes]
+        train_class_names['label'] = class_names['label'][all_classes]
+        train_class_names = utils.to_tensor(train_class_names, args.cuda)
+        train_class_names_ebd = net.ebd(train_class_names)  # [10, 36, 300]
+        train_class_names_ebd = torch.sum(train_class_names_ebd, dim=1) / train_class_names['text_len'].view((-1, 1))  # [10, 300]
+        dist_metrix = -neg_dist(train_class_names_ebd, train_class_names_ebd)  # [10, 10]
+
+        for i, d in enumerate(dist_metrix):
+            if i == 0:
+                dist_metrix_nodiag = del_tensor_ele(d, i).view((1, -1))
+            else:
+                dist_metrix_nodiag = torch.cat((dist_metrix_nodiag, del_tensor_ele(d, i).view((1, -1))), dim=0)
+
+        prob_metrix = F.softmax(dist_metrix_nodiag, dim=1)  # [10, 9]
+        prob_metrix = prob_metrix.cpu().numpy()
+
+
+        # 生成sample样本时候的概率矩阵
+        example_prob_metrix = []
+        for i, label in enumerate(all_classes):
+            train_examples = {}
+            train_examples['text'] = train_data['text'][train_data['label'] == label]
+            train_examples['text_len'] = train_data['text_len'][train_data['label'] == label]
+            train_examples['label'] = train_data['label'][train_data['label'] == label]
+            train_examples = utils.to_tensor(train_examples, args.cuda)
+            train_examples_ebd = net.ebd(train_examples)
+            train_examples_ebd = torch.sum(train_examples_ebd, dim=1) / train_examples['text_len'].view(
+                                    (-1, 1))  # [N, 300]
+            example_prob_metrix_one = -neg_dist(train_class_names_ebd[i].view((1, -1)), train_examples_ebd)
+            example_prob_metrix_one = F.softmax(example_prob_metrix_one, dim=1)  # [1, 1000]
+            example_prob_metrix_one = example_prob_metrix_one.cpu().numpy()
+            example_prob_metrix.append(example_prob_metrix_one)
+
+        return prob_metrix, example_prob_metrix
 
 
 def get_embedding(vocab, args):
@@ -49,6 +101,11 @@ def get_embedding(vocab, args):
     else:
         return modelG  # , modelD
 
+
+def dis_to_level(dis):
+    tmp_mean = torch.mean(dis, dim=-1, keepdim=True)
+    result = dis / tmp_mean
+    return -result
 
 class ModelG(nn.Module):
 
@@ -157,7 +214,7 @@ class ModelG(nn.Module):
         return {key: val.clone() for key, val in self.conv13.state_dict().items()}
 
     def loss(self, logits, label):
-        loss_ce = self.cost(-logits / torch.mean(logits, dim=1, keepdim=True), label)
+        loss_ce = self.cost(logits, label)
         return loss_ce
 
     def accuracy(self, pred, label):
@@ -167,6 +224,7 @@ class ModelG(nn.Module):
         return: [Accuracy] (A single value)
         '''
         return torch.mean((pred.view(-1) == label).type(torch.FloatTensor))
+
 
 
 # 自定义ContrastiveLoss
@@ -192,6 +250,36 @@ class ContrastiveLoss(torch.nn.Module):
 
         # print("**********************************************************************")
         return loss_contrastive
+
+
+
+def get_weight_of_test_support(support, query, args):
+    if len(support) > args.way*args.shot:
+        support = support[0:args.way*args.shot]
+    result = torch.cat( (torch.ones([args.way*args.shot*args.way]), args.test_loss_weight*torch.ones([args.way*args.way])),0 )
+
+    tensor_shape = support.shape[-1]
+    for each_way in range(args.way):
+        this_support = support[each_way*args.shot:each_way*args.shot+args.shot]
+        this_query = query[each_way*args.query:each_way*args.query+args.query]
+        all_dis = torch.ones([args.shot])
+        new_support = torch.ones([args.query,tensor_shape])
+        for each_shot in range(args.shot):
+            new_support[:] = this_support[each_shot]
+            new_support = new_support.cuda(args.cuda)
+            this_dis = F.pairwise_distance(new_support, this_query, keepdim=True)
+            this_dis = torch.mean(this_dis)
+            all_dis[each_shot] = this_dis
+        probab = dis_to_level(all_dis)
+        probab = F.softmax(probab, dim = -1)
+        probab = 5*probab
+        for each_shot in range(args.shot):
+            begin = each_way*(args.shot*args.way)+each_shot*args.way
+            result[begin:begin+args.way] = probab[each_shot]
+
+    if args.cuda != -1:
+        result = result.cuda(args.cuda)
+    return result
 
 
 def train_one(task, class_names, model, optG, criterion, args, grad):
@@ -227,11 +315,16 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     # print("class_names_dict:", class_names_dict['label'])
 
     """维度填充"""
-    if support['text'].shape[1] != class_names_dict['text'].shape[1]:
+    if support['text'].shape[1] > class_names_dict['text'].shape[1]:
         zero = torch.zeros(
             (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
             dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
+    elif support['text'].shape[1] < class_names_dict['text'].shape[1]:
+        zero = torch.zeros(
+            (support['text'].shape[0], class_names_dict['text'].shape[1] - support['text'].shape[1]),
+            dtype=torch.long)
+        support['text'] = torch.cat((support['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
     support['text_len'] = torch.cat((support['text_len'], class_names_dict['text_len']), dim=0)
@@ -291,7 +384,11 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     S_out1, S_out2 = model['G'](support_1, support_2)
     # print("-------0S1_2:", S_out1.shape, S_out2.shape)
 
-    loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), args.loss_weight*torch.ones([args.way*args.way])),0 )
+    # supp_, que_ = model['G'](support, query)
+    # loss_weight = get_weight_of_support(supp_, que_, args)
+
+    loss_weight = torch.cat(
+        (torch.ones([args.way * args.shot * args.way]), args.train_loss_weight * torch.ones([args.way * args.way])), 0)
     if args.cuda != -1:
         loss_weight = loss_weight.cuda(args.cuda)
 
@@ -329,7 +426,12 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     for k in range(args.train_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
         # print("-------1S1_2:", S_out1, S_out2)
-        loss_weight = torch.cat( (torch.ones([args.way*args.shot*args.way]), args.loss_weight*torch.ones([args.way*args.way])),0 )
+        # supp_, que_ = model['G'](support, query, fast_weights)
+        # loss_weight = get_weight_of_support(supp_, que_, args)
+
+        loss_weight = torch.cat(
+            (torch.ones([args.way * args.shot * args.way]), args.train_loss_weight * torch.ones([args.way * args.way])),
+            0)
         if args.cuda != -1:
             loss_weight = loss_weight.cuda(args.cuda)
 
@@ -364,8 +466,9 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     """计算Q上的损失"""
     CN = model['G'].forward_once_with_param(class_names_dict, fast_weights)
     XQ = model['G'].forward_once_with_param(query, fast_weights)
-    logits_q = neg_dist(XQ, CN)
+    logits_q = pos_dist(XQ, CN)
     # print("logits_q:", logits_q)
+    logits_q = dis_to_level(logits_q)
     q_loss = model['G'].loss(logits_q, YQ)
     # print("q_loss:", q_loss)
     _, pred = torch.max(logits_q, 1)
@@ -378,7 +481,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
     return q_loss, acc_q
 
 
-def train(train_data, val_data, model, class_names, criterion, args):
+def train(train_data, val_data, test_data, model, class_names, criterion, args):
     '''
         Train the model
         Use val_data to do early stopping
@@ -394,6 +497,11 @@ def train(train_data, val_data, model, class_names, criterion, args):
     best_acc = 0
     sub_cycle = 0
     best_path = None
+
+    if args.STS == True:
+        classes_sample_p, example_prob_metrix = pre_calculate(train_data, class_names, model['G'], args)
+    else:
+        classes_sample_p, example_prob_metrix = None, None
 
     optG = torch.optim.Adam(grad_param(model, ['G']), lr=args.meta_lr, weight_decay=args.weight_decay)
     # optG2 = torch.optim.Adam(grad_param(model, ['G2']), lr=args.task_lr)
@@ -420,9 +528,9 @@ def train(train_data, val_data, model, class_names, criterion, args):
         ep_loss = 0
         for _ in range(args.train_episodes):
 
-            sampled_classes, source_classes = task_sampler(train_data, args)
+            sampled_classes, source_classes = task_sampler(train_data, args, classes_sample_p)
 
-            train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, 1)
+            train_gen = SerialSampler(train_data, args, sampled_classes, source_classes, 1, example_prob_metrix)
 
             sampled_tasks = train_gen.get_epoch()
 
@@ -452,7 +560,8 @@ def train(train_data, val_data, model, class_names, criterion, args):
                 q_acc.item()) + "-----------")
 
         test_count = 500
-        if (ep % test_count == 0) and (ep != 0):
+        # if (ep % test_count == 0) and (ep != 0):
+        if (ep % test_count == 0):
             acc = acc / args.train_episodes / test_count
             loss = loss / args.train_episodes / test_count
             print("{}:".format(colored('--------[TRAIN] ep', 'blue')) + str(ep) + ", mean_loss:" + str(loss.item()) + ", mean_acc:" + str(
@@ -468,6 +577,19 @@ def train(train_data, val_data, model, class_names, criterion, args):
             #     ), flush=True)
             acc = 0
             loss = 0
+
+            # Evaluate test accuracy
+            cur_acc, cur_std = test(test_data, class_names, optG, net, criterion, args, args.test_epochs, False)
+            print(("[TEST] {}, {:s} {:2d}, {:s} {:s}{:>7.4f} ± {:>6.4f}, "
+                   ).format(
+                datetime.datetime.now(),
+                "ep", ep,
+                colored("test  ", "cyan"),
+                colored("acc:", "blue"), cur_acc, cur_std,
+                # colored("train stats", "cyan"),
+                # colored("G_grad:", "blue"), np.mean(np.array(grad['G'])),
+                # colored("clf_grad:", "blue"), np.mean(np.array(grad['clf'])),
+            ), flush=True)
 
             # Evaluate validation accuracy
             cur_acc, cur_std = test(val_data, class_names, optG, net, criterion, args, args.test_epochs, False)
@@ -577,11 +699,16 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     # print("class_names_dict:", class_names_dict['label'])
 
     """维度填充"""
-    if support['text'].shape[1] != class_names_dict['text'].shape[1]:
+    if support['text'].shape[1] > class_names_dict['text'].shape[1]:
         zero = torch.zeros(
             (class_names_dict['text'].shape[0], support['text'].shape[1] - class_names_dict['text'].shape[1]),
             dtype=torch.long)
         class_names_dict['text'] = torch.cat((class_names_dict['text'], zero.cuda()), dim=-1)
+    elif support['text'].shape[1] < class_names_dict['text'].shape[1]:
+        zero = torch.zeros(
+            (support['text'].shape[0], class_names_dict['text'].shape[1] - support['text'].shape[1]),
+            dtype=torch.long)
+        support['text'] = torch.cat((support['text'], zero.cuda()), dim=-1)
 
     support['text'] = torch.cat((support['text'], class_names_dict['text']), dim=0)
     support['text_len'] = torch.cat((support['text_len'], class_names_dict['text_len']), dim=0)
@@ -641,9 +768,9 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
 
     '''first step'''
     S_out1, S_out2 = model['G'](support_1, support_2)
-    loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), args.loss_weight * torch.ones([args.way * args.way])), 0)
-    if args.cuda != -1:
-        loss_weight = loss_weight.cuda(args.cuda)
+
+    supp_, que_ = model['G'](support, query)
+    loss_weight = get_weight_of_test_support(supp_, que_, args)
 
     loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
     # print("s_1_loss:", loss)
@@ -679,10 +806,9 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     '''steps remaining'''
     for k in range(args.test_iter - 1):
         S_out1, S_out2 = model['G'](support_1, support_2, fast_weights)
-        loss_weight = torch.cat((torch.ones([args.way * args.shot * args.way]), args.loss_weight * torch.ones([args.way * args.way])),
-                                0)
-        if args.cuda != -1:
-            loss_weight = loss_weight.cuda(args.cuda)
+
+        supp_, que_ = model['G'](support, query, fast_weights)
+        loss_weight = get_weight_of_test_support(supp_, que_, args)
 
         loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
         # print("train_iter: {} s_loss:{}".format(k, loss))
@@ -714,7 +840,8 @@ def test_one(task, class_names, model, optG, criterion, args, grad):
     """计算Q上的损失"""
     CN = model['G'].forward_once_with_param(class_names_dict, fast_weights)
     XQ = model['G'].forward_once_with_param(query, fast_weights)
-    logits_q = neg_dist(XQ, CN)
+    logits_q = pos_dist(XQ, CN)
+    logits_q = dis_to_level(logits_q)
     _, pred = torch.max(logits_q, 1)
     acc_q = model['G'].accuracy(pred, YQ)
 
@@ -769,6 +896,11 @@ def test(test_data, class_names, optG, model, criterion, args, test_epoch, verbo
 def main():
     args = parse_args()
 
+    # 可以打印到本地！存储下来
+    path = "./print_result/final_result/new_load episode 1 test_iter 20 10:5.8.txt"
+    sys.stdout = open(path, "w")
+    print("test sys.stdout")
+
     print_args(args)
 
     set_seed(args.seed)
@@ -798,7 +930,7 @@ def main():
 
     if args.mode == "train":
         # train model on train_data, early stopping based on val_data
-        optG = train(train_data, val_data, model, class_names, criterion, args)
+        optG = train(train_data, val_data, test_data, model, class_names, criterion, args)
 
     # val_acc, val_std, _ = test(val_data, model, args,
     #                                         args.val_episodes)

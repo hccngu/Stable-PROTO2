@@ -49,11 +49,11 @@ def _get_amazon_classes(args):
     '''
     label_dict = {
         'Amazon Instant Video is a subscription video on-demand over-the-top streaming and rental service of Amazon.com': 0,
-        'Apps for Android is a computer program or software application designed to run on a Android device': 1,
+        'Apps for Android is a computer program or software application designed to run on a Android device , like game app , music app , browser app': 1,
         'Automotive is concerned with self-propelled vehicles or machines': 2,
-        'Baby is an extremely young child': 3,
+        'Baby means Baby products that moms will use for their kids, like baby tracker , baby bottles , bottle warmer , baby nipple': 3,
         'Beauty products like Cosmetics are constituted from a mixture of chemical compounds derived from either natural sources or synthetically created ones': 4,
-        'Books are long written or printed literary compositions': 5,
+        'Books are long written or printed literary compositions , which tell us good stories or philosophy': 5,
         'CDs and DVDs are digital optical disc data storage formats to store and play digital audio recordings or music , something similar including compact disc (CD), vinyl, audio tape, or another medium': 6,
         'Cell Phones and Accessories refer to mobile phone and some hardware designed for the phone like microphone , headset': 7,
         'Clothing ，Shoes and Jewelry are items worn on the body to protect and comfort the human or for personal adornment': 8,
@@ -67,23 +67,24 @@ def _get_amazon_classes(args):
         'Musical Instruments are devices created or adapted to make musical sounds': 16,
         'Office Products are consumables and equipment regularly used in offices by businesses and other organizations': 17,
         'Patio Lawn and Garden refer to some tools and devices used in garden or lawn': 18,
-        'Pet Supplies refer to food or other consumables or tools that will be used when you keep a pet': 19,
+        'Pet Supplies refer to food or other consumables or tools that will be used when you keep a pet , like dog food , cat treat , pet toy': 19,
         'Sports and Outdoors refer to some tools and sport equipment used in outdoor sports': 20,
         'Tools and Home Improvement refer to hand tools or implements used in the process of renovating a home': 21,
         'Toys and Games are something used in play , usually undertaken for entertainment or fun, and sometimes used as an educational tool.': 22,
         'Video Games or Computer games are electronic games that involves interaction with a user interface or input device to generate visual feedback , which include arcade games , console games , and personal computer (PC) games': 23,
     }
 
-    val_classes = list(range(5))
-    test_classes = list(range(5, 14))
+    # val_classes = list(range(5))
+    # test_classes = list(range(5, 14))
     train_classes = list(range(14, 24))
+    val_classes = [6, 7, 11, 12, 13]
+    test_classes = [0, 1, 2, 3, 4, 5, 8, 9, 10]
 
     # val_classes = list(range(19, 24))
     # test_classes = list(range(9))
     # train_classes = list(range(9, 19))
 
     return train_classes, val_classes, test_classes, label_dict
-
 
 def _get_fewrel_classes(args):
     '''
@@ -238,7 +239,6 @@ def _get_huffpost_classes(args):
     test_classes = list(range(25, 41))
 
     return train_classes, val_classes, test_classes , label_dict
-
 
 def _get_reuters_classes(args):
     '''

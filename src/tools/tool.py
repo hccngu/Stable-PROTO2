@@ -7,15 +7,15 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser(
-            description="Few Shot Text Classification with Stable-PROTO.")
+        description="Few Shot Text Classification with Stable-PROTO.")
 
     parser.add_argument("--data_path", type=str,
                         default="../data/amazon.json",
                         help="path to dataset")
     parser.add_argument("--dataset", type=str, default="amazon",
                         help="name of the dataset. "
-                        "Options: [20newsgroup, amazon, huffpost, "
-                        "reuters, rcv1, fewrel]")
+                             "Options: [20newsgroup, amazon, huffpost, "
+                             "reuters, rcv1, fewrel]")
     parser.add_argument("--n_train_class", type=int, default=10,
                         help="number of meta-train classes")
     parser.add_argument("--n_val_class", type=int, default=5,
@@ -25,7 +25,7 @@ def parse_args():
 
     parser.add_argument("--n_workers", type=int, default=10,
                         help="Num. of cores used for loading data. Set this "
-                        "to zero if you want to use all the cpus.")
+                             "to zero if you want to use all the cpus.")
 
     parser.add_argument("--way", type=int, default=5,
                         help="#classes for each task")
@@ -91,15 +91,21 @@ def parse_args():
     parser.add_argument("--task_num", type=int, default=4, help="Number of tasks")
     parser.add_argument("--weight_decay", type=float, default=1e-4, help="weight decay")
 
-
     # TextCNN
     parser.add_argument("--kernel_num", type=int, default=16, help="kernel number: output size of one kernel")
     parser.add_argument("--kernel_size", default=[3, 4, 5], help="kernel size list")
 
-
     # loss_weight(classname part)
-    parser.add_argument("--loss_weight", type=float, default=10, help="the loss_weight of classname part, default the lossweight of support is 1")
+    parser.add_argument("--loss_weight", type=float, default=10,
+                        help="the loss_weight of classname part, default the lossweight of support is 1")
+    parser.add_argument("--train_loss_weight", type=float, default=10,
+                        help="the loss_weight of classname part, default the lossweight of support is 1")
+    parser.add_argument("--test_loss_weight", type=float, default=10,
+                        help="the loss_weight of classname part, default the lossweight of support is 1")
 
+
+    #启发式的 task_sample功能
+    parser.add_argument("--STS", action="store_true", default=False, help="Strategy for task sampling")
 
     return parser.parse_args()
 
@@ -118,7 +124,7 @@ def print_args(args):
          /        \\|  |  / __\\| \\_\\ \\  |_\\  ___/  /_____/ |    |    |    |   \\/    |    \\    |   /    |    \\
         /_______  /|__|  (___ /___  /____/\\___  >         |____|    |____|_  /\\_______  /____|   \\_______  /
                 \\/          \\/    \\/          \\/                           \\/         \\/                 \\/                                                            
-        
+
     """)
 
 
@@ -138,7 +144,7 @@ def load_model_state_dict(model, model_path):
     pretrained_dict = torch.load(model_path)
     keys = []
     for k, v in pretrained_dict.items():
-           keys.append(k)
+        keys.append(k)
 
     i = 0
 
@@ -157,6 +163,7 @@ def load_model_state_dict(model, model_path):
 def neg_dist(instances, class_proto):  # ins:[N*K, 256], cla:[N, 256]
     return -torch.pow(torch.pow(class_proto.unsqueeze(0) - instances.unsqueeze(1), 2).sum(-1), 0.5)
 
+
 def pos_dist(instances, class_proto):  # ins:[N*K, 256], cla:[N, 256]
     return torch.pow(torch.pow(class_proto.unsqueeze(0) - instances.unsqueeze(1), 2).sum(-1), 0.5)
 
@@ -166,7 +173,6 @@ def reidx_y(args, YS, YQ):
         Map the labels into 0,..., way
         @param YS: batch_size
         @param YQ: batch_size
-
         @return YS_new: batch_size
         @return YQ_new: batch_size
     '''
@@ -178,6 +184,8 @@ def reidx_y(args, YS, YQ):
             'Support set classes are different from the query set')
 
     if len(unique1) != args.way:
+        print("unique1", unique1)
+        print("inv_S", inv_S)
         raise ValueError(
             'Support set classes are different from the number of ways')
 
@@ -186,6 +194,6 @@ def reidx_y(args, YS, YQ):
             'Support set classes are different from the query set classes')
 
     Y_new = torch.arange(start=0, end=args.way, dtype=unique1.dtype,
-            device=unique1.device)
+                         device=unique1.device)
 
     return Y_new[inv_S], Y_new[inv_Q]
