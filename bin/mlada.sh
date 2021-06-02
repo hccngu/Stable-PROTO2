@@ -52,7 +52,7 @@ python ../src/main_simaese_network.py \
     --test_epochs 200 \
     --val_epochs 200 \
     --train_iter 10 \
-    --test_iter 18 \
+    --test_iter 20 \
     --meta_lr 1e-5 \
     --task_lr 7e-1 \
     --Comments "Amazon" \
@@ -61,5 +61,6 @@ python ../src/main_simaese_network.py \
     --notqdm \
     --weight_decay 1e-5 \
     --dropout 0.2 \
-    --loss_weight 5 \
-#    --STS \
+    --train_loss_weight 10.0 \
+    --test_loss_weight 5.8 \
+    --STS \
