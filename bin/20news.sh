@@ -1,15 +1,15 @@
 #
-#dataset=20newsgroup
-#data_path="../data/20news.json"
-#n_train_class=8
-#n_val_class=5
-#n_test_class=7
-
-dataset=amazon
-data_path="../data/amazon.json"
-n_train_class=10
+dataset=20newsgroup
+data_path="../data/20news.json"
+n_train_class=8
 n_val_class=5
-n_test_class=9
+n_test_class=7
+
+#dataset=amazon
+#data_path="../data/amazon.json"
+#n_train_class=10
+#n_val_class=5
+#n_test_class=9
 #
 #dataset=huffpost
 #data_path="../data/huffpost.json"
@@ -52,18 +52,18 @@ python ../src/main_simaese_network.py \
     --train_epochs 3000 \
     --test_epochs 200 \
     --val_epochs 200 \
-    --train_iter 20 \
-    --test_iter 23 \
-    --meta_lr 3e-5 \
+    --train_iter 15 \
+    --test_iter 15 \
+    --meta_lr 1e-5 \
     --task_lr 7e-1 \
-    --Comments "Amazon " \
+    --Comments "20news " \
     --patience 20 \
     --seed 3 \
     --notqdm \
     --weight_decay 1e-5 \
     --dropout 0.0 \
     --train_loss_weight 10.0 \
-    --test_loss_weight 5.8 \
+    --test_loss_weight 5.0 \
     --kernel_size 1 3 5 \
     --ebd_len 10 \
-    --path "./print_result/amazon/5way-5shot-text3.txt" \
+    --path "./print_result3/20news/new CN text6 .txt" \

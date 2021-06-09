@@ -115,6 +115,7 @@ class ModelG(nn.Module):
         self.args = args
 
         self.ebd = ebd
+        self.ebd_begin_len = args.ebd_len
 
         self.ebd_dim = self.ebd.embedding_dim
         self.hidden_size = 128
@@ -134,7 +135,9 @@ class ModelG(nn.Module):
     def forward_once(self, data):
 
         ebd = self.ebd(data)  # [b, text_len, 300]
-        ebd = ebd[:, :10, :]
+        # if data['text_len'][0] < 60:
+        #     ebd = ebd[:, :self.ebd_begin_len, :]
+        ebd = ebd[:, :self.ebd_begin_len, :]
         ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
         x1 = self.conv11(ebd)  # [b, kernel_num, H_out, 1]
@@ -163,6 +166,8 @@ class ModelG(nn.Module):
     def forward_once_with_param(self, data, param):
 
         ebd = self.ebd(data)  # [b, text_len, 300]
+        # if data['text_len'][0] < 60:
+        #     ebd = ebd[:, :self.ebd_begin_len, :]
         ebd = ebd.unsqueeze(1)  # [b, 1, text_len, 300]
 
         w1, b1 = param['conv11']['weight'], param['conv11']['bias']
@@ -393,6 +398,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
         loss_weight = loss_weight.cuda(args.cuda)
 
     loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
+    # print("**********loss first step*******", loss)
     # print("s_1_loss:", loss)
     zero_grad(model['G'].parameters())
 
@@ -436,6 +442,7 @@ def train_one(task, class_names, model, optG, criterion, args, grad):
             loss_weight = loss_weight.cuda(args.cuda)
 
         loss = criterion(S_out1, S_out2, support['label_final'], loss_weight)
+        # print("**********loss remain step*******", loss)
         # print("train_iter: {} s_loss:{}".format(k, loss))
         zero_grad(orderd_params_fc.values())
         zero_grad(orderd_params_conv11.values())
@@ -559,7 +566,7 @@ def train(train_data, val_data, test_data, model, class_names, criterion, args):
             print("{}:".format(colored('--------[TRAIN] ep', 'blue')) + str(ep) + ", loss:" + str(q_loss.item()) + ", acc:" + str(
                 q_acc.item()) + "-----------")
 
-        test_count = 500
+        test_count = 100
         # if (ep % test_count == 0) and (ep != 0):
         if (ep % test_count == 0):
             acc = acc / args.train_episodes / test_count
@@ -856,7 +863,9 @@ def test(test_data, class_names, optG, model, criterion, args, test_epoch, verbo
     # model['G'].train()
 
     acc = []
+
     for ep in range(test_epoch):
+        #print("**********************test ep******************************",ep)
 
         sampled_classes, source_classes = task_sampler(test_data, args)
 
@@ -897,9 +906,10 @@ def main():
     args = parse_args()
 
     # 可以打印到本地！存储下来
-    path = "./print_result/final_result/new_load episode 1 test_iter 20 10:5.8.txt"
-    sys.stdout = open(path, "w")
-    print("test sys.stdout")
+    if args.path != "":
+        path = args.path
+        sys.stdout = open(path, "w")
+        print("test sys.stdout")
 
     print_args(args)
 

@@ -62,11 +62,13 @@ class SerialSampler():
             if example_prob_metrix is None:
                 for y in sampled_classes:
                     tmp = np.random.permutation(len(self.idx_list[y]))
+                    if len(tmp) < self.args.shot + self.args.query:
+                        tmp = np.random.choice(len(self.idx_list[y]), self.args.shot + self.args.query, replace=True)
+
                     support_idx.append(
                         self.idx_list[y][tmp[:self.args.shot]])
                     query_idx.append(
-                        self.idx_list[y][
-                            tmp[self.args.shot:self.args.shot + self.args.query]])
+                        self.idx_list[y][tmp[self.args.shot:self.args.shot + self.args.query]])
             else:
                 for y in sampled_classes:
                     tmp = np.random.choice(len(self.idx_list[y]), self.args.shot + self.args.query, p=example_prob_metrix[y][0], replace=False)

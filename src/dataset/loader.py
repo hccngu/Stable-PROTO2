@@ -36,9 +36,13 @@ def _get_20newsgroup_classes(args):
             'soc religion christian': 19,
         }
 
-    val_classes = list(range(5))
-    train_classes = list(range(5, 13))
-    test_classes = list(range(13, 20))
+    # 手动2
+    # tmp_best
+    train_classes = [0, 3, 8, 9, 2, 15, 19, 17]
+    # computer
+    val_classes = [4, 6, 7, 12, 18]
+    # science other
+    test_classes = [1, 5, 11, 13, 10, 14, 16]
 
     return train_classes, val_classes, test_classes, label_dict
 
@@ -74,15 +78,39 @@ def _get_amazon_classes(args):
         'Video Games or Computer games are electronic games that involves interaction with a user interface or input device to generate visual feedback , which include arcade games , console games , and personal computer (PC) games': 23,
     }
 
+
+
+    # text2.txt
+    # train_classes = list(range(14, 24))
+    # val_classes = [6, 7, 11, 12, 0]
+    # test_classes = [13, 1, 2, 3, 4, 5, 8, 9, 10]
+
+    # new_load6
+    # train_classes = [0, 7, 9, 12, 15, 16, 19, 20, 21, 23]
+    # val_classes = [2, 4, 11, 17, 18]
+    # test_classes = [1, 3, 5, 6, 8, 10, 13, 14, 22]
+
+    #MIT
+    # train_classes = [2, 3, 4, 7, 11, 12, 13, 18, 19, 20]
+    # val_classes = [1, 22, 23, 6, 9]
+    # test_classes = [0, 5, 14, 15, 8, 10, 16, 17, 21]
+
+    # 初始
     # val_classes = list(range(5))
     # test_classes = list(range(5, 14))
-    train_classes = list(range(14, 24))
-    val_classes = [6, 7, 11, 12, 13]
-    test_classes = [0, 1, 2, 3, 4, 5, 8, 9, 10]
+    # train_classes = list(range(14, 24))
 
-    # val_classes = list(range(19, 24))
-    # test_classes = list(range(9))
-    # train_classes = list(range(9, 19))
+    # best!!!
+    # train_classes = [1, 23, 13, 12, 16, 3, 2, 10, 20, 18]
+    # val_classes = [14, 6, 21, 0, 22]
+    # test_classes = [7, 17, 9, 11, 19, 4, 15, 5, 8]
+
+    # best-change!!!
+    train_classes = [21, 0, 22, 1, 23, 16, 3, 2, 10, 18]
+    val_classes = [14, 6, 12, 13, 20]
+    test_classes = [7, 17, 9, 11, 19, 4, 15, 5, 8]
+
+    #
 
     return train_classes, val_classes, test_classes, label_dict
 
@@ -173,14 +201,20 @@ def _get_fewrel_classes(args):
          'main subject primary topic of a work (see also P180: depicts)': 79,
     }
 
-    train_classes = [0, 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 19, 21,
-                     22, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38,
-                     39, 40, 41, 43, 44, 45, 46, 48, 49, 50, 52, 53, 56, 57, 58,
-                     59, 61, 62, 63, 64, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
-                     76, 77, 78]
+    # train_classes = [0, 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16, 19, 21,
+    #                  22, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+    #                  39, 40, 41, 43, 44, 45, 46, 48, 49, 50, 52, 53, 56, 57, 58,
+    #                  59, 61, 62, 63, 64, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
+    #                  76, 77, 78]
+    #
+    # val_classes = [7, 9, 17, 18, 20]
+    # test_classes = [23, 29, 42, 47, 51, 54, 55, 60, 65, 79]
 
-    val_classes = [7, 9, 17, 18, 20]
-    test_classes = [23, 29, 42, 47, 51, 54, 55, 60, 65, 79]
+
+    # best
+    train_classes = [61, 74, 4, 36, 66, 43, 70, 33, 67, 79, 68, 45, 13, 6, 31, 77, 25, 39, 11, 17, 44, 78, 20, 65, 71, 40, 37, 12, 47, 10, 38, 28, 55, 57, 34, 59, 62, 58, 5, 2, 41, 32, 64, 9, 42, 46, 52, 18, 19, 60, 48, 51, 14, 16, 27, 73, 69, 24, 26, 56, 63, 15, 53, 35, 72]
+    val_classes = [29, 30, 54, 23, 49]
+    test_classes = [22, 76, 75, 50, 8, 7, 1, 21, 0, 3]
 
     return train_classes, val_classes, test_classes , label_dict
 
@@ -189,54 +223,78 @@ def _get_huffpost_classes(args):
         @return list of classes associated with each split
     '''
     label_dict = {
-        'entertainment': 2,
-        'politics': 0,
-        'world news': 28,
-        'black voices': 12,
-        'crime': 20,
-        'women': 17,
-        'comedy': 10,
-        'weird news': 22,
-        'sports': 11,
-        'media': 21,
-        'queer voices': 7,
-        'tech': 30,
-        'religion': 25,
-        'science': 27,
-        'travel': 3,
-        'business': 9,
-        'latino voices': 38,
-        'impact': 18,
-        'education': 40,
-        'parents': 14,
-        'style': 26,
-        'healthy living': 6,
-        'green': 23,
-        'arts & culture': 35,
-        'taste': 29,
-        'college': 37,
-        'the worldpost': 15,
-        'good news': 34,
-        'worldpost': 24,
-        'arts': 32,
-        'fifty': 33,
-        'wellness': 1,
-        'parenting': 5,
-        'style & beauty': 4,
-        'divorce': 19,
-        'weddings': 16,
-        'food & drink': 8,
-        'home & living': 13,
-        'money': 31,
-        'culture & arts': 39,
-        'environment': 36,
-
-
+        'politics government court amendment congressional debate runoff democrat republican Political figures': 0,
+        'wellness healthy sport body exercise therapist workout training sleep yoga happiness diet': 1,
+        'entertainment enjoy Movie Film and television works and Entertainment star and Entertainment news': 2,
+        'travel travelers trip Tourism Tourist destination flight flights airport airlines vacation italian hotel hotels map italy disney': 3,
+        'style and beauty beautiful photos adidas fashion clothes dress magazine covers photos makeup looks star': 4,
+        'parenting Parents parent mother mom dad uncles kids daughter babies child baby teens': 5,
+        'healthy living health care drug medical medicare medicaid disease virus deaths': 6,
+        'queer voices LGBT LGBTQ lesbian gay hiv homosexual love straight people trans , nonbinary community gendering transgender Sexual orientation coming out pride ': 7,
+        'food foods and drink fruit recipes recipe delicious sandwich pizza chicken wine': 8,
+        'business company uber amazon wells fargo bank bankrupt billionaire stock leader ceo lead worker': 9,
+        'comedy Interesting thing Gossip jokes hilariously funny jimmy show stephen': 10,
+        'sports olympic olympics game team athletes player players bowl winter hockey baseball basketball football soccer gymnastics skate': 11,
+        'black voices racist racism police cop white people rapper black men martin luther king': 12,
+        'home & living apartment home butler home design furniture bedroom holiday christmas ': 13,
+        'parents parenting parent mother mom dad uncles kids child baby babies teens family': 14,
+        'the world post korea u.s. china france war attack nuclear missile iran refugees isis egypt syria america referendum ': 15,
+        'weddings wedding engagement honeymoon bridal marriage love couples dresses brides bride groom bridesmaid romance newlyweds ring knot guests': 16,
+        'women woman female harassment men sexual gender sexist feminism abortions abortion': 17,
+        'impact refugees fight hurricane homelessness shelters donate poverty hunger homeless': 18,
+        'divorce divorced uncoupling breakup single dating spouse husband wife children marriage married family  infidelity alimony': 19,
+        'crime shooting shooter shot hostage crime murder gunman suspect charged arrested arrest inmate police victim': 20,
+        'media advertisers media twitter editor journalists journalism news editor journalist newspaper': 21,
+        'weird news weird halloween fark quiz': 22,
+        'green climate hurricane storm environment environmental climate change wildfire coal animal whale gorilla': 23,
+        'world post iran world isis war greece china syrian russia africa crisis america yemen mediterranean poland elections migrants philippines': 24,
+        'religion pope muslim meditation ramadan faith church muslims christian religious christians god religion christianity evangelicals catholic jesus': 25,
+        'style clothes beauty fashion hair dress makeup prince clothing carpet': 26,
+        'science scientists space nasa science earth brain telescope galaxy astronomers': 27,
+        'world news reuters president embassy attack australia israel zimbabwe myanmar jerusalem': 28,
+        'taste food foods sweets meal foods barbecue salads wine coffee recipes cooking': 29,
+        'tech facebook apple google iphone twitter uber microsoft instagram samsung users app encryption android hackers cyber web hackers': 30,
+        'money credit tax financial finances lottery investor savings costs buy debt mortgage banks bank money': 31,
+        'arts art artist stage ballet music photography photographer nighter theatre dance': 32,
+        'fifty midlife retire age care grandma mother retirement aging alzheimer older grandkids childhood': 33,
+        'good news selfless kittens dog cat rescue rescued adorable': 34,
+        'arts and culture book new artist women museum books broadway history authors sculpture potter': 35,
+        'environment week climate animal tigers giraffes animals weather tornado  oil species chemicals': 36,
+        'college professors faculty chancellor professor freshman student campus university universities colleges fraternity commencement': 37,
+        'latino voices latinos latina immigrants immigration spanish latin mexico mexican hispanic': 38,
+        'culture and arts photos image blog artist artists culture gallery exhibition photo theatre photography paintings': 39,
+        'education classrooms classroom education learning student students school schools school districts stem educational college teacher teachers teaching': 40
     }
 
-    val_classes = list(range(5))
-    train_classes = list(range(5, 25))
-    test_classes = list(range(25, 41))
+    # good [5,6,7,16,19,20, , 25, 31, 38,40]
+    # similar [1,6,11][5, 14] [4, 26] [1, 6] [15, 24, 28] [23, 36] [37,40] [8, 29] [15, 24, 28] [32, 35,39]
+    # soso []
+    # bad [0, 2,3 ,9,10,15,18, 21, 22,24,27, 28, 34]
+
+    # train_classes = [0,1, 2,3 ,9,10,11,15,18, 21, 22,24,27, 28, 32,33,34,36,37,39]
+    # val_classes = list(range(16,21))
+    # test_classes = [4, 5, 6, 7, 8, 12, 13, 16, 19, 20, 23, 25, 30, 31, 38, 40]
+
+    # try new one
+    # tmp_best
+    train_classes = [0, 1, 3, 4, 9, 10, 12, 14, 15, 17, 19, 20, 21, 23, 29, 30, 32, 33, 35, 37]
+    val_classes = [2, 13, 18, 22, 34]
+    test_classes = [5, 6, 7, 8, 11, 16, 24, 25, 26, 27, 28, 31, 36, 38, 39, 40]
+
+    # # try new one
+    # train_classes = [2, 6, 32, 18, 26, 34, 27, 7, 3, 29, 15, 28, 25, 1, 39, 33, 35, 17, 37, 16]
+    # val_classes = [24, 38, 12, 23, 30]
+    # test_classes = [40, 5, 9, 13, 11, 36, 21, 0, 4, 8, 19, 22, 10, 31, 20, 14]
+
+    # ### night try
+    # train_classes = [21, 0, 20, 17, 34, 10, 2, 14, 23, 33, 36, 5, 8, 15, 18, 1, 40, 29, 4, 24]
+    # val_classes = [9, 35, 32, 28, 26]
+    # test_classes = [30, 7, 27, 3, 11, 39, 25, 38, 6, 16, 12, 31, 13, 19, 37, 22]
+
+
+    print("train_classes",train_classes)
+    print("val_classes", val_classes)
+    print("test_classes", test_classes)
 
     return train_classes, val_classes, test_classes , label_dict
 
@@ -245,42 +303,42 @@ def _get_reuters_classes(args):
         @return list of classes associated with each split
     '''
     label_dict = {
-        'tariffs': 28,
-        'grain': 12,
-        'ship': 25,
-        'gold': 11,
-        'acquisition merge': 0,
-        'tin': 27,
-        'industrial production': 14,
-        'profit': 9,
-        'unemployment': 16,
-        'sugar': 26,
-        'inflation': 7,
-        'treasury bank': 18,
-        'rate': 13,
-        'cocoa': 3,
-        'coffee': 4,
-        'oil': 8,
-        'cotton': 6,
-        'cattle': 17,
-        'money supply': 19,
-        'copper': 5,
-        'aluminium': 1,
-        'rubber': 24,
-        'gas': 20,
-        'reserves': 22,
-        'current account': 2,
-        'gdp gnp': 10,
-        'steel': 15,
-        'orange': 21,
-        'retail': 23,
-        'producer price wholesale': 30,
-        'oils and fats tax': 29,
+        'acquisition merge If a company or business person makes an acquisition , they buy another company or part of a company': 0,
+        'aluminium Aluminium is a lightweight metal used, for example, for making cooking equipment and aircraft parts': 1,
+        'trade deficit , current account deficit mean financial situation in the red , shortage , decrease , decline ': 2,
+        'cocoa Cocoa is a brown powder made from the seeds of a tropical tree. It is used in making chocolate . It is usually as goods for trade ': 3,
+        'coffee Coffee is the roasted beans or powder from which the drink is made': 4,
+        'copper Copper is reddish brown metal that is used to make things such as coins and electrical wires': 5,
+        'cotton Cotton is a plant and which produces soft fibres used in making cotton cloth': 6,
+        'inflation Inflation is a general increase in the prices of goods and services in a country': 7,
+        'oil Oil is a smooth , thick liquid that is used as a fuel and for making the parts of machines move smoothly. Oil is found underground': 8,
+        'profit A profit is an amount of money that you gain when you are paid more for something than itcost you to make, get, or do it': 9,
+        'gdp gnp gross domestic product gross national product In economics, a country GDP is the total value of goods and services produced within a country in a year': 10,
+        'gold Gold is a valuable , yellow-coloured metal that is used for making jewellery and ornaments, and as an international currency': 11,
+        'grain Grain is a cereal , especially wheat or corn , that has been harvested and is used for food or in trade': 12,
+        'rate A rate is the amount of money that is charged for goods or services or ': 13,
+        'industrial production Industrial production refers to the production output and the output of industrial establishments and covers sectors such as mining, manufacturing, electricity, gas and steam and air-conditioning': 14,
+        'steel Steel is a very strong metal which is made mainly from iron. Steel is used for making many things, for example bridges, buildings, vehicles, and cutlery . It is a important merchandise': 15,
+        'unemployment Unemployment is the fact that people who lose jobs, want jobs cannot get them': 16,
+        'cattle Cattle are cows and bulls , including animals living in farm': 17,
+        'treasury bank the Treasury is the government department that deals with the country finances': 18,
+        'money supply Related policies and news on money supply from the central financial department': 19,
+        'gas Gas is a substance like air and burns easily. It is used as a fuel for cooking and heating': 20,
+        'orange a round sweet fruit that has a thick orange skin and an orange centre , which is goods in trade': 21,
+        'reserves foreign reserves , gold and currency reserves , The amount of foreign currency stored by the central bank': 22,
+        'retail Retail is the activity of selling products direct to the public, usually in small quantities': 23,
+        'rubber  Rubber is a strong, waterproof, elastic substance made from the juice of a tropical tree or produced chemically. It is used for making tyres, boots, and other products': 24,
+        'ship a large boat for travelling on water, especially across the sea': 25,
+        'sugar Sugar is a sweet substance that is used to make food and drinks sweet. It is usually as goods for trade': 26,
+        'tin A tin is a metal container which is filled with food and sealed in order to preserve the food for long periods of time': 27,
+        'tariffs A tariff is a tax that a government collects on goods coming into a country': 28,
+        'oils and fats tax mean the tax in oils and fats which Promulgated by the European Union': 29,
+        'producer price wholesale A producer price index (PPI) is a price index that measures the average changes in prices received by domestic producers for their output.': 30
     }
 
     train_classes = list(range(15))
-    val_classes = list(range(15, 20))
-    test_classes = list(range(20, 31))
+    val_classes = list(range(26, 31))
+    test_classes = list(range(15, 26))
 
     return train_classes, val_classes, test_classes, label_dict
 
@@ -288,15 +346,94 @@ def _get_rcv1_classes(args):
     '''
         @return list of classes associated with each split
     '''
+    label_dict = {
+        'company development  The latest corporate development trends of large companies ， including new business ， New company ，Cooperation ': 0,
+        'economy suit court lawsuit about litigation cases in the economic field, about court decisions, about the latest announcements': 1,
+        'Government announces new policy to company The government has promulgated new measures and released new measures, and the central fiscal policy has been adjusted': 2,
+        'Stock exchange , company see listing or delisted companies go public , sees listing or companies are delisted , result in stocks rise or fall ( stock trading , stock exchange )': 3,
+        'The latest news from banks and companies The news includes a variety of rankings, company financials, a variety of bank data, from central banks and companies around the world': 4,
+        "Company performace and financial statements About the company's financial results , the latest fluctuations in profits , up or down ": 5,
+        'Enterprise manufacturing costs , productivity , profit Entity manufacturing enterprises manufacturing costs , productivity , profit has undergone some changes': 6,
+        'Companies go bankrupt and share prices fall Poor management of the company led to a falling stock price, heavy debt and even bankruptcy': 7,
+        'Debt ,  loan ,  credit The company is not doing well and then gets loans, which leads to credit problems and debt problems': 8,
+        'Company Stock News About the stock related operations , the company listed ,  launches IPO , stock subscription , stock repurchase , stock decline': 9,
+        'buying companies or shares about acquire new companies , buy stock, bid for companies': 10,
+        'sell company or Related Property Sell the company, sell the factory, sell stores': 11,
+        'privatisation Privatization models , privatisation of companies, privatisation of bonds , privatise public service': 12,
+        'Industrial manufacturing, manufacturing output The annual industrial production output of the national manufacturing industry': 13,
+        'Emerging technologies , high tech Emerging technologies , high technology , high-end manufacturing , including automotive manufacturing , personal computers , chips , Internet technology , electronic devices': 14,
+        'Pharmaceutical manufacturing, pharmaceutical industry, electronic technology New drug testing , new drug manufacturing , new electronic technology , and car airbag safety': 15,
+        'Opening new factories and opening new banks, closing port , factories About opening or closing factories, like building new malls, new refineries, closing ports': 16,
+        'nan Air fares, bank deposits and loans, telephone services, port freight': 17,
+        'Media and Advertising  ad Advertising and Media Digest , ads , commercial ': 18,
+        'Contracts and orders New contracts , new supply agreements , new shipping orders , new agreements , new deals': 19,
+        'Competition and Monopoly Companies compete with each other, the monopoly position is threatened, launched an anti-monopoly investigation': 20,
+        'CEO ， Managers in the enterprise News about corporate executives , Business Managers , corporate presidents ， CEOs , chiefs and boards': 21,
+        'Employers and employees , strikes , labor treatment The labor board appealed on behalf of the Detroit strikers, whose employees work for the company': 22,
+        'Freight , shipping , air freight News about freight , shipping , ports , transportation , containers': 23,
+        'GDP growth and market recovery With GDP growth and change and market recovery, the economy has a bright future': 24,
+        'Currency , monetary policy , economic strategy Currency , monetary policy , economic strategy , national banks , economic union': 25,
+        'Price change in many fields The prices in many fields,including industry,raw material,commodities etc. rise,except in service and  manufacture input ': 26,
+        'Inflation and economic boost Inflation boosts economics and impacts currency policies ': 27,
+        'Family deposits increase  Families save more money and spend less than before.': 28,
+        'decrease in retail The decrease in retail causes the economic decline in many fields.': 29,
+        'Treasury balances Treasury balances , frozen savings ,school budget shortage': 30,
+        'Goods purchasing index rise During goods orders ,manufacturing index ,industry pace ,business index': 31,
+        'Jobless and unemployment rate Unemployment rate rise or decrease sharply': 32,
+        'Foreign investment and fund Foreign investment , cross-boarder fund and refugee aid rise in many countries': 33,
+        'trade and economics coorperation between economies Economical trade , investment flow , budget deficit , investment and intellectual property , cooperation with Asian countries.': 34,
+        'Housing starts Housing outlook ,  residential alterations and additions , mortgate rates': 35,
+        'Economic indicators  Key economic indicators  , import and export volume , trade balance , latest quarterly stats , following figures': 36,
+        'News about the economy News conference ,  economic hardship , issue coins': 37,
+        'Official notification of the European Union The European Commission makes relevant regulations , Mad Cow Disease , release documents and announcements': 38,
+        'EU single monetary policy Many countries are in deficit , most people are against the single monetary policy , budget plans of EU countries': 39,
+        'Reform proposals for the future of the EU The benefits can countries get after the reform , thrash out a new treaty , providing a better life for the people of the EU': 40,
+        'International political relations of the EU The EU values their political ties': 41,
+        'The Middle East peace process Strenthen trade ， hitorical canlendar , Middle East peace process': 42,
+        'Disposal of crimes Arrest criminals ， give a ruling': 43,
+        'War and peace Military exercises ， weapon preparation , realignment of forces': 44,
+        'Dipolomatic relations Boost links and further the peace process': 45,
+        'Accident Accidents resulted in casualties': 46,
+        'Art and culture The relationship between art,culture and interests': 47,
+        'Human and ecology The influence and observation of human beings on ecology': 48,
+        'Fashion and design Western fashion relating to brand, era, and region': 49,
+        'diseases and medical conditions Different medical and disease conditions across the world': 50,
+        'Employment rate and job market The impact of employees on the organization and industry': 51,
+        'Death and casualties  Reports about the thoughts of death and life': 52,
+        'Political changes around the world There have been changes in cabinet and leadership around the world': 53,
+        'Matters relating to women of international importance matters about important women including Mother Teresa, princesses and queens': 54,
+        "International religious affairs The Pope's status , attitude , and the state of the church and the church": 55,
+        'The exploration of the universe Exploration on board Mir and a partial solar eclipse': 56,
+        'International sports events related affairs International sporting events including football , golf , motor racing , tennis and rugby': 57,
+        'The development of tourism in various countries The development of tourism in various countries and the characteristic tourist attractions': 58,
+        'Opposition forces Guerrillas ， Democratic Party ， separatist': 59,
+        'Emergency weather comditions Emergency weather comditions and its harm': 60,
+        'Social welfare Raise social welfare , give home to homeless people': 61,
+        'Stock markets Ups and downs of the stock market': 62,
+        'Government securities bonds Government securities bonds , maturity bonds , national assets': 63,
+        'Money Markets Money market shortage,National debts , futures , money rates , bank liquidity': 64,
+        'Interest rate changes in some countries interest rate changes differs in countries, some remain , some decrease , some increase': 65,
+        'shipping market in some countries Shipping information , cargo carried and related market changes in different countries': 66,
+        'international market exchange rate the value of US dollar rises and Japanese currency continues to weaken ,  which may be a victim of the Asian currency crisis': 67,
+        'world crop trade market  Information on price changes, imports, exports and new developments of agricultural products in various countries': 68,
+        'Precious metal market in some countries London precious metal prices baised to downside ': 69,
+        'arrangements of financial trading market in holidays Arrangements of financial exchanges in several countries during holidays': 70
+        }
 
-    train_classes = [1, 2, 12, 15, 18, 20, 22, 25, 27, 32, 33, 34, 38, 39,
-                     40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
-                     54, 55, 56, 57, 58, 59, 60, 61, 66]
-    val_classes = [5, 24, 26, 28, 29, 31, 35, 23, 67, 36]
-    test_classes = [0, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 16, 17, 19, 21, 30, 37,
-                    62, 63, 64, 65, 68, 69, 70]
+    # train_classes = [1, 2, 12, 15, 18, 20, 22, 25, 27, 32, 33, 34, 38, 39,
+    #                  40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
+    #                  54, 55, 56, 57, 58, 59, 60, 61, 66]
+    # val_classes = [5, 24, 26, 28, 29, 31, 35, 23, 67, 36]
+    # test_classes = [0, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 16, 17, 19, 21, 30, 37,
+    #                 62, 63, 64, 65, 68, 69, 70]
 
-    return train_classes, val_classes, test_classes
+    # good
+    train_classes = [33, 55, 62, 43, 63, 61, 57, 50, 66, 8, 47, 11, 4, 38, 44, 31, 58, 30, 70, 15, 46, 48, 42, 20, 41,
+                     3, 22, 16, 51, 28, 18, 49, 54, 0, 29, 67, 10]
+    val_classes = [64, 21, 14, 26, 56, 7, 65, 69, 13, 9]
+    test_classes = [34, 52, 32, 60, 5, 1, 40, 53, 68, 23, 12, 45, 2, 17, 39, 37, 19, 36, 24, 6, 35, 27, 25, 59]
+
+    return train_classes, val_classes, test_classes, label_dict
 
 
 def _load_json(path):
@@ -449,6 +586,7 @@ def _data_to_nparray(data, vocab, args):
     return new_data
 
 
+
 def _split_dataset(data, finetune_split):
     """
         split the data into train and val (maintain the balance between classes)
@@ -502,7 +640,7 @@ def load_dataset(args):
     elif args.dataset == 'reuters':
         train_classes, val_classes, test_classes, label_dict = _get_reuters_classes(args)
     elif args.dataset == 'rcv1':
-        train_classes, val_classes, test_classes = _get_rcv1_classes(args)
+        train_classes, val_classes, test_classes, label_dict = _get_rcv1_classes(args)
     else:
         raise ValueError(
             'args.dataset should be one of'
@@ -511,6 +649,10 @@ def load_dataset(args):
     assert(len(train_classes) == args.n_train_class)
     assert(len(val_classes) == args.n_val_class)
     assert(len(test_classes) == args.n_test_class)
+
+    print("train_classes",train_classes)
+    print("val_classes",val_classes)
+    print("test_classes",test_classes)
 
     tprint('Loading data')
     all_data = _load_json(args.data_path)
@@ -556,5 +698,10 @@ def load_dataset(args):
     val_data['is_train'] = True
     test_data['is_train'] = True
     # this tag is used for distinguishing train/val/test when creating source pool
+
+    temp_num = np.argsort(class_names['label'])
+    class_names['label'] = class_names['label'][temp_num]
+    class_names['text'] = class_names['text'][temp_num]
+    class_names['text_len'] = class_names['text_len'][temp_num]
 
     return train_data, val_data, test_data, class_names, vocab

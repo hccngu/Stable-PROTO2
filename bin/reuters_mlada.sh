@@ -4,12 +4,12 @@
 #n_train_class=8
 #n_val_class=5
 #n_test_class=7
-
-dataset=amazon
-data_path="../data/amazon.json"
-n_train_class=10
-n_val_class=5
-n_test_class=9
+#
+#dataset=amazon
+#data_path="../data/amazon.json"
+#n_train_class=10
+#n_val_class=5
+#n_test_class=9
 #
 #dataset=huffpost
 #data_path="../data/huffpost.json"
@@ -18,12 +18,13 @@ n_test_class=9
 #n_test_class=16
 #
 #
-#dataset=reuters
-#data_path="../data/reuters.json"
-#n_train_class=15
-#n_val_class=5
-#n_test_class=11
-#
+dataset=reuters
+data_path="../data/reuters.json"
+n_train_class=15
+n_val_class=5
+n_test_class=11
+##
+##
 #dataset=fewrel
 #data_path="../data/fewrel.json"
 #n_train_class=65
@@ -50,13 +51,13 @@ python ../src/main_simaese_network.py \
     --n_test_class=$n_test_class \
     --train_episodes 3 \
     --train_epochs 3000 \
-    --test_epochs 200 \
+    --test_epochs 50 \
     --val_epochs 200 \
-    --train_iter 20 \
-    --test_iter 23 \
-    --meta_lr 3e-5 \
-    --task_lr 7e-1 \
-    --Comments "Amazon " \
+    --train_iter 15 \
+    --test_iter 25 \
+    --meta_lr 1e-6 \
+    --task_lr 5e-1 \
+    --Comments "Reuters " \
     --patience 20 \
     --seed 3 \
     --notqdm \
@@ -66,4 +67,4 @@ python ../src/main_simaese_network.py \
     --test_loss_weight 5.8 \
     --kernel_size 1 3 5 \
     --ebd_len 10 \
-    --path "./print_result/amazon/5way-5shot-text3.txt" \
+    --path "./print_result/reuters/text3.txt" \

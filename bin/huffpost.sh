@@ -5,17 +5,18 @@
 #n_val_class=5
 #n_test_class=7
 
-dataset=amazon
-data_path="../data/amazon.json"
-n_train_class=10
-n_val_class=5
-n_test_class=9
-#
-#dataset=huffpost
-#data_path="../data/huffpost.json"
-#n_train_class=20
+#dataset=amazon
+#data_path="../data/amazon.json"
+#n_train_class=10
 #n_val_class=5
-#n_test_class=16
+#n_test_class=9
+#
+#
+dataset=huffpost
+data_path="../data/huffpost.json"
+n_train_class=20
+n_val_class=5
+n_test_class=16
 #
 #
 #dataset=reuters
@@ -48,22 +49,22 @@ python ../src/main_simaese_network.py \
     --n_train_class=$n_train_class \
     --n_val_class=$n_val_class \
     --n_test_class=$n_test_class \
-    --train_episodes 3 \
-    --train_epochs 3000 \
+    --train_episodes 2 \
+    --train_epochs 2000 \
     --test_epochs 200 \
     --val_epochs 200 \
-    --train_iter 20 \
-    --test_iter 23 \
-    --meta_lr 3e-5 \
-    --task_lr 7e-1 \
-    --Comments "Amazon " \
+    --train_iter 15 \
+    --test_iter 15 \
+    --meta_lr 2e-5 \
+    --task_lr 5e-1 \
+    --Comments "huffpost " \
     --patience 20 \
     --seed 3 \
     --notqdm \
     --weight_decay 1e-5 \
     --dropout 0.0 \
     --train_loss_weight 10.0 \
-    --test_loss_weight 5.8 \
+    --test_loss_weight 6.0 \
     --kernel_size 1 3 5 \
-    --ebd_len 10 \
-    --path "./print_result/amazon/5way-5shot-text3.txt" \
+    --ebd_len 40 \
+    --path "./print_result/huffpost/new CN-text10.txt" \

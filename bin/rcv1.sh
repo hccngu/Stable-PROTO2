@@ -5,11 +5,11 @@
 #n_val_class=5
 #n_test_class=7
 
-dataset=amazon
-data_path="../data/amazon.json"
-n_train_class=10
-n_val_class=5
-n_test_class=9
+#dataset=amazon
+#data_path="../data/amazon.json"
+#n_train_class=10
+#n_val_class=5
+#n_test_class=9
 #
 #dataset=huffpost
 #data_path="../data/huffpost.json"
@@ -30,15 +30,15 @@ n_test_class=9
 #n_val_class=5
 #n_test_class=10
 #
-#dataset=rcv1
-#data_path="../data/rcv1.json"
-#n_train_class=37
-#n_val_class=10
-#n_test_class=24
+dataset=rcv1
+data_path="../data/rcv1_text.json"
+n_train_class=37
+n_val_class=10
+n_test_class=24
 python ../src/main_simaese_network.py \
     --cuda 0 \
     --way 5 \
-    --shot 5 \
+    --shot 1 \
     --query 25 \
     --mode train \
     --embedding mlada \
@@ -63,7 +63,7 @@ python ../src/main_simaese_network.py \
     --weight_decay 1e-5 \
     --dropout 0.0 \
     --train_loss_weight 10.0 \
-    --test_loss_weight 5.8 \
+    --test_loss_weight 5.0 \
     --kernel_size 1 3 5 \
     --ebd_len 10 \
-    --path "./print_result/amazon/5way-5shot-text3.txt" \
+    --path "./print_result/rcv1/new 1shot-text3.txt" \

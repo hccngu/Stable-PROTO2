@@ -93,7 +93,7 @@ def parse_args():
 
     # TextCNN
     parser.add_argument("--kernel_num", type=int, default=16, help="kernel number: output size of one kernel")
-    parser.add_argument("--kernel_size", default=[3, 4, 5], help="kernel size list")
+    parser.add_argument("--kernel_size", nargs='+', type=int, default=[3,4,5], help="kernel size list")
 
     # loss_weight(classname part)
     parser.add_argument("--loss_weight", type=float, default=10,
@@ -106,6 +106,13 @@ def parse_args():
 
     #启发式的 task_sample功能
     parser.add_argument("--STS", action="store_true", default=False, help="Strategy for task sampling")
+
+    #path
+    parser.add_argument("--path", type=str, default="", help="Store the print result")
+
+    #调整ebd初始长度
+    parser.add_argument("--ebd_len", type=int, default=10, help="self.ebd_begin_len")
+
 
     return parser.parse_args()
 
